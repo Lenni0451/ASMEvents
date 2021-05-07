@@ -1,64 +1,99 @@
 package net.lenni0451.asmevents;
 
+import net.lenni0451.asmevents.event.EventTarget;
 import net.lenni0451.asmevents.event.IEvent;
-import net.lenni0451.asmevents.utils.ASMUtils;
-import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.tree.*;
-import sun.misc.Unsafe;
+import net.lenni0451.asmevents.utils.Tuple;
 
-import java.lang.reflect.Field;
-import java.util.Collections;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class EventManager {
 
+    private static final Map<Class<? extends IEvent>, Map<Class<?>, List<Tuple<Object, Method>>>> EVENT_LISTENER = new ConcurrentHashMap<>();
+    private static final Map<Class<? extends IEvent>, IEventPipeline> EVENT_PIPELINES = new ConcurrentHashMap<>();
+
     /**
-     * Just for testing
+     * Register all events in the class<br>
+     * If the listener is a class only static events are registered<br>
+     *
+     * @param listener The instance or class of the listener
      */
-    public static void main(String[] args) throws Throwable {
-        final String eventManagerPackage = EventManager.class.getName().replace(".", "/");
-        final String pipelineName = IEventPipeline.class.getName().replace(".", "/");
-        final String eventName = IEvent.class.getName().replace(".", "/");
-        final String methodName = IEventPipeline.class.getDeclaredMethods()[0].getName();
-        final String methodDescriptor = "(L" + eventName + ";)V";
+    public static void register(final Object listener) {
+        register(null, listener);
+    }
 
-        ClassNode node = new ClassNode();
-        node.name = eventManagerPackage + "a";
-        node.access = Opcodes.ACC_PUBLIC;
-        node.superName = "java/lang/Object";
-        node.interfaces = Collections.singletonList(pipelineName);
-        node.version = Opcodes.V1_8;
-        {
-            MethodNode con = new MethodNode(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
-            con.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
-            con.instructions.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V"));
-            con.instructions.add(new InsnNode(Opcodes.RETURN));
-            node.methods.add(con);
-        }
-        {
-            MethodNode con = new MethodNode(Opcodes.ACC_PUBLIC, methodName, methodDescriptor, null, null);
-            con.instructions.add(new FieldInsnNode(Opcodes.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;"));
-            con.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
-            con.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V"));
-            con.instructions.add(new InsnNode(Opcodes.RETURN));
-            node.methods.add(con);
-        }
-        byte[] bc = ASMUtils.toBytes(node);
+    /**
+     * Only register a single event type<br>
+     * If the eventClass is null all events are registered<br>
+     * If the listener is a class only static events are registered<br>
+     *
+     * @param eventClass The event you want to register or null to register all events
+     * @param listener   The instance or class of the listener
+     */
+    public static void register(final Class<? extends IEvent> eventClass, final Object listener) {
+        Objects.requireNonNull(listener);
+        final Class<?> listenerClass = (listener instanceof Class<?> ? (Class<?>) listener : listener.getClass());
+        final Object listenerInstance = (listener instanceof Class<?> ? null : listener);
 
-        Unsafe unsafe;
-        Field f = Unsafe.class.getDeclaredField("theUnsafe");
-        f.setAccessible(true);
-        unsafe = (Unsafe) f.get(null);
-
-        Class<?> clazz = unsafe.defineAnonymousClass(EventManager.class, bc, null);
-        Object instance = clazz.getDeclaredConstructors()[0].newInstance();
-
-        IEventPipeline pipeline = (IEventPipeline) instance;
-        pipeline.call(new IEvent() {
-            @Override
-            public String toString() {
-                return "GAY";
+        for (Method method : listenerClass.getDeclaredMethods()) {
+            EventTarget eventTarget = method.getDeclaredAnnotation(EventTarget.class);
+            if (eventTarget == null) continue;
+            boolean onlyHasEvents = true;
+            for (Class<?> type : method.getParameterTypes()) {
+                if (!IEvent.class.isAssignableFrom(type)) {
+                    onlyHasEvents = false;
+                    break;
+                }
             }
-        });
+            if (!onlyHasEvents) return;
+            for (Class<?> type : method.getParameterTypes()) {
+                if (eventClass != null && !eventClass.equals(type)) continue;
+
+                //Cast is not unchecked, believe me
+                register((Class<? extends IEvent>) type, listenerClass, listenerInstance, method);
+            }
+        }
+    }
+
+    private static void register(final Class<? extends IEvent> eventClass, final Class<?> listenerClass, final Object instance, final Method method) {
+        Objects.requireNonNull(eventClass);
+        Objects.requireNonNull(listenerClass);
+        Objects.requireNonNull(method);
+
+        if (instance == null && !Modifier.isStatic(method.getModifiers())) return;
+        if (instance != null && Modifier.isStatic(method.getModifiers())) return;
+
+        final Map<Class<?>, List<Tuple<Object, Method>>> listenerClassToMethods = EVENT_LISTENER.computeIfAbsent(eventClass, c -> new HashMap<>());
+        final List<Tuple<Object, Method>> methods = listenerClassToMethods.computeIfAbsent(listenerClass, c -> new CopyOnWriteArrayList<>());
+
+        methods.add(new Tuple<>(instance, method));
+    }
+
+
+    private static void unregister(final Object listener) {
+        unregister(null, listener);
+    }
+
+    private static void unregister(final Class<? extends IEvent> eventClass, final Object listener) {
+        Objects.requireNonNull(listener);
+
+    }
+
+    private static void unregister(final Class<? extends IEvent> eventClass, final Class<?> listenerClass, final Object instance, final Method method) {
+        Objects.requireNonNull(eventClass);
+        Objects.requireNonNull(listenerClass);
+        Objects.requireNonNull(method);
+
+        if (instance == null && !Modifier.isStatic(method.getModifiers())) return;
+        if (instance != null && Modifier.isStatic(method.getModifiers())) return;
+
+
     }
 
 }
