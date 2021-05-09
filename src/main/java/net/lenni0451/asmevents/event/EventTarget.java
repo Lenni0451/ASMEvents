@@ -17,7 +17,7 @@ public @interface EventTarget {
     /**
      * The type of event which should handled by the method
      */
-    EnumEventType event() default EnumEventType.ALL;
+    EnumEventType type() default EnumEventType.ALL;
 
     /**
      * The method also targets cancelled methods
