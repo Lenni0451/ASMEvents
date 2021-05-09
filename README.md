@@ -27,13 +27,23 @@ To register an event listener method call.
 EventManager.register(Listener.call); //Static listener
 EventManager.register(new Listener()); //Non static listener
 
+//Register a listener to only a specific event
+EventManager.register(Event.class, Listener.call); //Static listener
+EventManager.register(Event.class, new Listener()); //Non static listener
+
+
 //Unregister a listener
 EventManager.unregister(Listener.call); //Static listener
 EventManager.unregister(new Listener()); //Non static listener
+
+//Unregister a listener from only a specific event
+EventManager.unregister(Event.class, Listener.call); //Static listener
+EventManager.unregister(Event.class, new Listener()); //Non static listener
 ```
 You can either pass an listener class or instance to the `register` method.  
 If you pass a class only static methods get registered.  
-If you pass an instance only non static methods get registered.
+If you pass an instance only non static methods get registered.  
+If the listener is already registered/not registered nothing will happen. This prevents call stacking.  
 
 To call an event just invoke the `call` method.
 ```Java
