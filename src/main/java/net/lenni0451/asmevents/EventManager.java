@@ -228,7 +228,7 @@ public class EventManager {
                     visitor.visitJumpInsn(Opcodes.IFEQ, skipReturn);
                     visitor.visitInsn(Opcodes.RETURN);
                     visitor.visitLabel(skipReturn);
-                } else if (ICancellableEvent.class.isAssignableFrom(eventType) && eventTarget.skipCancelled()) { //We don't need to check if it is cancelled if it is done before
+                } else if (ICancellableEvent.class.isAssignableFrom(eventType) && eventTarget.skipCancelled()) { //We don't need to check if it is cancelled if the event is stoppable
                     if (jumpAfter == null) jumpAfter = new Label();
 
                     visitor.visitVarInsn(Opcodes.ALOAD, 3);
@@ -291,6 +291,13 @@ public class EventManager {
     }
 
 
+    /**
+     * Set the handler of unhandled exceptions<br>
+     * By default all exceptions are thrown as RuntimeExceptions.<br>
+     * You may want to just print them to prevent the program from crashing
+     *
+     * @param errorListener The listener
+     */
     public static void setErrorListener(final IErrorListener errorListener) {
         Objects.requireNonNull(errorListener);
 
