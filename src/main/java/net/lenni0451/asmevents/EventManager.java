@@ -147,10 +147,18 @@ public class EventManager {
     public static <T extends IEvent> T call(final T event) {
         Objects.requireNonNull(event);
 
-        IEventPipeline pipeline = EVENT_PIPELINES.get(event.getClass());
-        if (pipeline != null) pipeline.call(event);
-        pipeline = EVENT_PIPELINES.get(IEvent.class);
-        if (pipeline != null) pipeline.call(event);
+        try {
+            IEventPipeline pipeline = EVENT_PIPELINES.get(event.getClass());
+            if (pipeline != null) pipeline.call(event);
+        } catch (Throwable t) {
+            ERROR_LISTENER.onException(t);
+        }
+        try {
+            IEventPipeline pipeline = EVENT_PIPELINES.get(IEvent.class);
+            if (pipeline != null) pipeline.call(event);
+        } catch (Throwable t) {
+            ERROR_LISTENER.onException(t);
+        }
 
         return event;
     }
@@ -206,7 +214,7 @@ public class EventManager {
             pipelineNode.visitField(Opcodes.ACC_PUBLIC, "listener" + i, Type.getDescriptor(listener.getClass()), null, null);
         }
         { //Insert call method and all listener calls
-            MethodVisitor visitor = pipelineNode.visitMethod(Opcodes.ACC_PUBLIC, IEventPipeline.class.getDeclaredMethods()[0].getName(), "(" + Type.getDescriptor(IEvent.class) + ")V", null, new String[]{"java/lang/Throwable"});
+            MethodVisitor visitor = pipelineNode.visitMethod(Opcodes.ACC_PUBLIC, ReflectUtils.getMethodByArgs(IEventPipeline.class).getName(), "(" + Type.getDescriptor(IEvent.class) + ")V", null, new String[]{"java/lang/Throwable"});
             { //Cast and IEvent interface to the actual event class and store it
                 visitor.visitVarInsn(Opcodes.ALOAD, 1);
                 visitor.visitTypeInsn(Opcodes.CHECKCAST, eventType.getName().replace(".", "/"));

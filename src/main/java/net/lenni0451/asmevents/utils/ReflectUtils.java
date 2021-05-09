@@ -11,7 +11,7 @@ public class ReflectUtils {
         for (Method method : clazz.getDeclaredMethods()) {
             if (Arrays.equals(method.getParameterTypes(), args)) return method;
         }
-        return null;
+        throw new RuntimeException("Unable to find method in " + clazz.getName() + " with arguments " + Arrays.toString(args));
     }
 
     public static Field getEnumField(final Enum<?> value) {
@@ -25,7 +25,7 @@ public class ReflectUtils {
             } catch (Throwable ignored) {
             }
         }
-        return null;
+        throw new RuntimeException("Unable to find enum field for " + value.getClass().getName() + " " + value);
     }
 
 }
