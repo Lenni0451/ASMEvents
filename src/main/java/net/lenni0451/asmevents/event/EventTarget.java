@@ -1,5 +1,8 @@
 package net.lenni0451.asmevents.event;
 
+import net.lenni0451.asmevents.event.enums.EnumEventPriority;
+import net.lenni0451.asmevents.event.enums.EnumEventType;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;

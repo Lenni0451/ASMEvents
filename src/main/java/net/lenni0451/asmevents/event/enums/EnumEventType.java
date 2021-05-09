@@ -1,4 +1,4 @@
-package net.lenni0451.asmevents.event;
+package net.lenni0451.asmevents.event.enums;
 
 public enum EnumEventType {
 
