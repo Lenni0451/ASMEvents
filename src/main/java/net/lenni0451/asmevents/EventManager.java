@@ -18,12 +18,9 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
 
-import java.io.File;
-import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -281,11 +278,6 @@ public class EventManager {
         }
 
         byte[] data = ASMUtils.toBytes(pipelineNode);
-        try {
-            Files.write(new File("C:/Users/User/Desktop/lel.class").toPath(), data);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
         PipelineLoader pipelineLoader = new PipelineLoader(EventManager.class);
         Class<? extends IEventPipeline> pipelineClass = pipelineLoader.loadPipeline(pipelineNode.name.replace("/", "."), data);
         try {
