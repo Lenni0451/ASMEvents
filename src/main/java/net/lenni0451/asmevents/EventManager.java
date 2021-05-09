@@ -3,12 +3,16 @@ package net.lenni0451.asmevents;
 import jdk.internal.org.objectweb.asm.Type;
 import net.lenni0451.asmevents.event.EventTarget;
 import net.lenni0451.asmevents.event.IEvent;
+import net.lenni0451.asmevents.internal.IErrorListener;
+import net.lenni0451.asmevents.internal.IEventPipeline;
+import net.lenni0451.asmevents.internal.RuntimeThrowErrorListener;
 import net.lenni0451.asmevents.utils.ASMUtils;
 import net.lenni0451.asmevents.utils.PipelineLoader;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.*;
@@ -17,8 +21,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 public class EventManager {
 
-    public static final Map<Class<? extends IEvent>, Map<Object, List<Method>>> EVENT_LISTENER = new ConcurrentHashMap<>();
-    public static final Map<Class<? extends IEvent>, IEventPipeline> EVENT_PIPELINES = new ConcurrentHashMap<>();
+    private static final Map<Class<? extends IEvent>, Map<Object, List<Method>>> EVENT_LISTENER = new ConcurrentHashMap<>();
+    private static final Map<Class<? extends IEvent>, IEventPipeline> EVENT_PIPELINES = new ConcurrentHashMap<>();
+    private static IErrorListener ERROR_LISTENER = new RuntimeThrowErrorListener();
 
     /**
      * Register all events in the class<br>
@@ -84,7 +89,7 @@ public class EventManager {
         final Map<Object, List<Method>> listenerClassToMethods = EVENT_LISTENER.computeIfAbsent(eventClass, c -> new HashMap<>());
         final List<Method> methods = listenerClassToMethods.computeIfAbsent(listener, c -> new CopyOnWriteArrayList<>());
 
-        methods.add(method);
+        if (!methods.contains(method)) methods.add(method);
     }
 
 
@@ -103,6 +108,14 @@ public class EventManager {
         }
     }
 
+    /**
+     * Unregister a specific event from a class or listener instance<br>
+     * If the listener is a class all static events get unregistered<br>
+     * If the listener is an instance all non static events get unregistered
+     *
+     * @param eventClass The class of the event to unregister
+     * @param listener   The class or instance of the listener
+     */
     public static void unregister(final Class<? extends IEvent> eventClass, final Object listener) {
         Objects.requireNonNull(listener);
 
@@ -116,10 +129,32 @@ public class EventManager {
     }
 
 
+    public static <T extends IEvent> T call(final T event) {
+        Objects.requireNonNull(event);
+
+        IEventPipeline pipeline = EVENT_PIPELINES.get(event.getClass());
+        if (pipeline != null) pipeline.call(event);
+        pipeline = EVENT_PIPELINES.get(IEvent.class);
+        if (pipeline != null) pipeline.call(event);
+
+        return event;
+    }
+
+
+    /**
+     * Internal method to recalculate a list of event pipelines
+     *
+     * @param eventTypes The list of events to recalculate
+     */
     private static void updatePipelines(final List<Class<? extends IEvent>> eventTypes) {
         for (Class<? extends IEvent> eventType : eventTypes) updatePipeline(eventType);
     }
 
+    /**
+     * Internal method to recalculate a event pipeline
+     *
+     * @param eventType The event to recalculate
+     */
     private static void updatePipeline(final Class<? extends IEvent> eventType) {
         final Map<Object, List<Method>> listenerMethods = EVENT_LISTENER.get(eventType);
         if (listenerMethods == null) return;
@@ -153,7 +188,7 @@ public class EventManager {
         for (int i = 0; i < allListener.size(); i++) {
             final Object listener = allListener.get(i);
 
-            pipelineNode.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_FINAL, "listener" + i, Type.getDescriptor(listener.getClass()), null, null);
+            pipelineNode.visitField(Opcodes.ACC_PUBLIC, "listener" + i, Type.getDescriptor(listener.getClass()), null, null);
         }
         { //Insert call method and all listener calls
             MethodVisitor visitor = pipelineNode.visitMethod(Opcodes.ACC_PUBLIC, IEventPipeline.class.getDeclaredMethods()[0].getName(), "(" + Type.getDescriptor(IEvent.class) + ")V", null, new String[]{"java/lang/Throwable"});
@@ -185,6 +220,27 @@ public class EventManager {
         byte[] data = ASMUtils.toBytes(pipelineNode);
         PipelineLoader pipelineLoader = new PipelineLoader(EventManager.class);
         Class<? extends IEventPipeline> pipelineClass = pipelineLoader.loadPipeline(pipelineNode.name.replace("/", "."), data);
+        try {
+            IEventPipeline pipeline = (IEventPipeline) pipelineClass.getDeclaredConstructors()[0].newInstance();
+            {
+                Field[] fields = pipeline.getClass().getDeclaredFields();
+                for (int i = 0; i < fields.length; i++) {
+                    Field field = fields[i];
+                    field.setAccessible(true);
+                    field.set(pipeline, allListener.get(i));
+                }
+            }
+            EVENT_PIPELINES.put(eventType, pipeline);
+        } catch (Throwable t) {
+            ERROR_LISTENER.onException(t);
+        }
+    }
+
+
+    public static void setErrorListener(final IErrorListener errorListener) {
+        Objects.requireNonNull(errorListener);
+
+        ERROR_LISTENER = errorListener;
     }
 
 }

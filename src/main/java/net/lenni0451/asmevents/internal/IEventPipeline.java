@@ -1,4 +1,4 @@
-package net.lenni0451.asmevents;
+package net.lenni0451.asmevents.internal;
 
 import net.lenni0451.asmevents.event.IEvent;
 
