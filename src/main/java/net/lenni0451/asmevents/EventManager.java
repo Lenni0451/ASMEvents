@@ -3,18 +3,27 @@ package net.lenni0451.asmevents;
 import jdk.internal.org.objectweb.asm.Type;
 import net.lenni0451.asmevents.event.EventTarget;
 import net.lenni0451.asmevents.event.IEvent;
+import net.lenni0451.asmevents.event.enums.EnumEventType;
+import net.lenni0451.asmevents.event.types.ICancellableEvent;
+import net.lenni0451.asmevents.event.types.IStoppableEvent;
+import net.lenni0451.asmevents.event.types.ITypedEvent;
 import net.lenni0451.asmevents.internal.IErrorListener;
 import net.lenni0451.asmevents.internal.IEventPipeline;
 import net.lenni0451.asmevents.internal.RuntimeThrowErrorListener;
 import net.lenni0451.asmevents.utils.ASMUtils;
 import net.lenni0451.asmevents.utils.PipelineLoader;
+import net.lenni0451.asmevents.utils.ReflectUtils;
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
 
+import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -173,7 +182,7 @@ public class EventManager {
             allMethods.sort((o1, o2) -> { //Sort all methods by priority
                 EventTarget o1target = o1.getDeclaredAnnotation(EventTarget.class);
                 EventTarget o2target = o2.getDeclaredAnnotation(EventTarget.class);
-                return o1target.priority().compareTo(o2target.priority());
+                return o2target.priority().compareTo(o1target.priority());
             });
             allListener = new ArrayList<>(listenerMethods.keySet());
             allListener.removeIf(o -> o instanceof Class<?>);
@@ -197,27 +206,72 @@ public class EventManager {
                 visitor.visitTypeInsn(Opcodes.CHECKCAST, eventType.getName().replace(".", "/"));
                 visitor.visitVarInsn(Opcodes.ASTORE, 2);
             }
+            if (ICancellableEvent.class.isAssignableFrom(eventType)) {
+                visitor.visitVarInsn(Opcodes.ALOAD, 1);
+                visitor.visitTypeInsn(Opcodes.CHECKCAST, ICancellableEvent.class.getName().replace(".", "/"));
+                visitor.visitVarInsn(Opcodes.ASTORE, 3);
+            }
+            if (ITypedEvent.class.isAssignableFrom(eventType)) {
+                visitor.visitVarInsn(Opcodes.ALOAD, 1);
+                visitor.visitTypeInsn(Opcodes.CHECKCAST, ITypedEvent.class.getName().replace(".", "/"));
+                visitor.visitVarInsn(Opcodes.ASTORE, 4);
+            }
             for (Method method : allMethods) {
-                if (!Modifier.isStatic(method.getModifiers())) {
-                    final Object listener = methodToInstance.get(method);
-                    visitor.visitVarInsn(Opcodes.ALOAD, 0);
-                    visitor.visitFieldInsn(Opcodes.GETFIELD, pipelineNode.name, "listener" + allListener.indexOf(listener), Type.getDescriptor(listener.getClass()));
+                final EventTarget eventTarget = method.getDeclaredAnnotation(EventTarget.class);
+                Label jumpAfter = null;
+
+                if (IStoppableEvent.class.isAssignableFrom(eventType)) {
+                    final Label skipReturn = new Label();
+
+                    visitor.visitVarInsn(Opcodes.ALOAD, 3);
+                    visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, ICancellableEvent.class.getName().replace(".", "/"), ReflectUtils.getMethodByArgs(ICancellableEvent.class).getName(), "()Z", true);
+                    visitor.visitJumpInsn(Opcodes.IFEQ, skipReturn);
+                    visitor.visitInsn(Opcodes.RETURN);
+                    visitor.visitLabel(skipReturn);
+                } else if (ICancellableEvent.class.isAssignableFrom(eventType) && eventTarget.skipCancelled()) { //We don't need to check if it is cancelled if it is done before
+                    if (jumpAfter == null) jumpAfter = new Label();
+
+                    visitor.visitVarInsn(Opcodes.ALOAD, 3);
+                    visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, ICancellableEvent.class.getName().replace(".", "/"), ReflectUtils.getMethodByArgs(ICancellableEvent.class).getName(), "()Z", true);
+                    visitor.visitJumpInsn(Opcodes.IFNE, jumpAfter);
                 }
-                for (Class<?> param : method.getParameterTypes()) {
-                    if (param.equals(eventType)) visitor.visitVarInsn(Opcodes.ALOAD, 2);
-                    else visitor.visitInsn(Opcodes.ACONST_NULL);
+                if (ITypedEvent.class.isAssignableFrom(eventType) && !eventTarget.type().equals(EnumEventType.ALL)) {
+                    if (jumpAfter == null) jumpAfter = new Label();
+
+                    visitor.visitVarInsn(Opcodes.ALOAD, 4);
+                    visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, ITypedEvent.class.getName().replace(".", "/"), ReflectUtils.getMethodByArgs(ITypedEvent.class).getName(), "()" + Type.getDescriptor(EnumEventType.class), true);
+                    visitor.visitFieldInsn(Opcodes.GETSTATIC, EnumEventType.class.getName().replace(".", "/"), ReflectUtils.getEnumField(eventTarget.type()).getName(), Type.getDescriptor(EnumEventType.class));
+                    visitor.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Enum", "equals", "(Ljava/lang/Object;)Z");
+                    visitor.visitJumpInsn(Opcodes.IFEQ, jumpAfter);
                 }
-                if (Modifier.isStatic(method.getModifiers())) {
-                    visitor.visitMethodInsn(Opcodes.INVOKESTATIC, method.getDeclaringClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);
-                } else {
-                    visitor.visitMethodInsn(Opcodes.INVOKEVIRTUAL, method.getDeclaringClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);
+                {
+                    if (!Modifier.isStatic(method.getModifiers())) {
+                        final Object listener = methodToInstance.get(method);
+                        visitor.visitVarInsn(Opcodes.ALOAD, 0);
+                        visitor.visitFieldInsn(Opcodes.GETFIELD, pipelineNode.name, "listener" + allListener.indexOf(listener), Type.getDescriptor(listener.getClass()));
+                    }
+                    for (Class<?> param : method.getParameterTypes()) {
+                        if (param.equals(eventType)) visitor.visitVarInsn(Opcodes.ALOAD, 2);
+                        else visitor.visitInsn(Opcodes.ACONST_NULL);
+                    }
+                    if (Modifier.isStatic(method.getModifiers())) {
+                        visitor.visitMethodInsn(Opcodes.INVOKESTATIC, method.getDeclaringClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);
+                    } else {
+                        visitor.visitMethodInsn(Opcodes.INVOKEVIRTUAL, method.getDeclaringClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);
+                    }
                 }
+                if (jumpAfter != null) visitor.visitLabel(jumpAfter);
             }
             visitor.visitInsn(Opcodes.RETURN);
             visitor.visitEnd();
         }
 
         byte[] data = ASMUtils.toBytes(pipelineNode);
+        try {
+            Files.write(new File("C:/Users/User/Desktop/lel.class").toPath(), data);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         PipelineLoader pipelineLoader = new PipelineLoader(EventManager.class);
         Class<? extends IEventPipeline> pipelineClass = pipelineLoader.loadPipeline(pipelineNode.name.replace("/", "."), data);
         try {
