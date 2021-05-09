@@ -134,7 +134,7 @@ someField = event.getSomeField();
 ```
 ```Java
 //Here an example for a full method using pre and post events
-public static void multiply(int num) {
+public static int multiply(int num) {
     if(EventManager.call(new MathEvent(EnumEventType.PRE, num)).isCancelled()) return num;
 
     num *= 2;
