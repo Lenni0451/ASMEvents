@@ -118,6 +118,33 @@ public void onEvent(final Event event) {
 }
 ```
 
+```Java
+//This is the basic event call
+EventManager.call(new Event());
+```
+```Java
+//This is an example for a cancellable event which breaks the method execution if cancelled
+if (EventManager.call(new Event()).isCancelled()) return;
+```
+```Java
+//This is an example for a cancellable event which breaks the method execution if cancelled and modifies a variable
+Event event = EventManager.call(new Event(someField));
+if (event.isCancelled()) return;
+someField = event.getSomeField();
+```
+```Java
+//Here an example for a full method using pre and post events
+public static void multiply(int num) {
+    if(EventManager.call(new MathEvent(EnumEventType.PRE, num)).isCancelled()) return num;
+
+    num *= 2;
+
+    num = EventManager.call(new MathEvent(EnumEventType.POST, num)).getNum();
+
+    return num;
+}
+```
+
 ## Contribute
 If you want to contribute code please make sure it is kept in the same style as the original code:  
  - Method parameter should be final except you modify them.  
