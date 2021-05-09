@@ -1,2 +1,75 @@
 # ASMEvents
-A fast Event system using ASM to dynamically load executor classes
+A fast and feature rich Event library for Java using ASM to dynamically generate executor classes.
+
+## Usage
+### EventTarget annotation
+To register an event listener method you must mark it with the `@EventTarget` annotation.
+```Java
+@EventTarget
+public void onEvent(Event event) {
+}
+```
+The `@EventTarget` annotation has some useful fields you can use.  
+
+| Field         | Description                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| priority      | Give listener more priority in the pipeline and ensure they are called ad the correct spot |
+| type          | Choose only which type of event should get passed to the method (`PRE`, `POST` or both)    |
+| skipCancelled | Skip events which are already cancelled to speed up the call                               |
+| noParamEvents | Some events to listen to without getting their instance                                    |
+
+### EventManager
+The EventManager is the main class you will be working with.  
+It handles event listener registering, unregistering and calling.  
+To register an event listener method call.
+```Java
+//Register a listener
+EventManager.register(Listener.call); //Static listener
+EventManager.register(new Listener()); //Non static listener
+
+//Unregister a listener
+EventManager.unregister(Listener.call); //Static listener
+EventManager.unregister(new Listener()); //Non static listener
+```
+You can either pass an listener class or instance to the `register` method.  
+If you pass a class only static methods get registered.  
+If you pass an instance only non static methods get registered.
+
+To call an event just invoke the `call` method.
+```Java
+//The event needs to implement the IEvent interface
+EventManager.call(new Event());
+```
+
+If an exception occurs in the generated event pipeline it is passed to the error listener.  
+By default the error listener rethrows all exception as a runtime exception but you can set your own handler if you just want to print the exception it or do something else with it.  
+To do that just call the `setErrorListener` method.
+```Java
+//The error listener needs to implement the IErrorListener interface
+EventManager.addErrorListener();
+```
+
+### Event types
+There are 4 types of events
+
+| Type              | Description                                                                                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IEvent            | The default event which itself has no special usage                                                                                                                                          |
+| ICancellableEvent | The cancellable event can be cancelled (as the name suggest). It can be used if a handler should be able to prevent some code from executing. You need to handle the cancelled code yourself |
+| IStoppableEvent   | The stoppable event is the same as the cancelled but all following listeners get skipped                                                                                                     |
+| ITypedEvent       | The typed event can have two types `PRE` and `POST`. It is useful if an event is called at the beginning and end of a method                                                                 |
+
+All events have an already wrapped class to just extend which just contains the basic needed methods.
+
+## Contribute
+If you want to contribute code please make sure it is kept in the same style as the original code:  
+ - Method parameter should be final except you modify them.  
+ - Local fields can be final if it makes the code more readable but usually I don't really care about this much.  
+ - Global fields should be final except you modify them.  
+ - Global fields should generally be private and only accessed using getter and setter. Exceptions for this are static fields.  
+ - Static fields always have an upper case name and spaces are replaced with underscores.  
+ - Please avoid using streams. I don't like them (they always seem so slow in comparison with foreach loops).  
+
+Just please keep it in the style as the other code.
+
+You do not need to mark changes but please document them well so it is easier for others to understand why you chose that code style and not others.
