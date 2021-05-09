@@ -141,6 +141,12 @@ public class EventManager {
     }
 
 
+    /**
+     * Call an event and pass it into the pipeline
+     *
+     * @param event The event to call
+     * @return The same event you already passed
+     */
     public static <T extends IEvent> T call(final T event) {
         Objects.requireNonNull(event);
 
