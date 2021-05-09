@@ -3,10 +3,10 @@ A fast and feature rich Event library for Java using ASM to dynamically generate
 
 ## Usage
 ### EventTarget annotation
-To register an event listener method you must mark it with the `@EventTarget` annotation.
+To register an event listener method you must mark it with the `@EventTarget` annotation. The name of the method and parameters are not fixed. Name them as you want.
 ```Java
 @EventTarget
-public void onEvent(Event event) {
+public void onEvent(final Event event) {
 }
 ```
 The `@EventTarget` annotation has some useful fields you can use.  
@@ -61,6 +61,53 @@ There are 4 types of events
 
 All events have an already wrapped class to just extend which just contains the basic needed methods.
 
+## Other code snippets
+```Java
+//It is possible to listen to all events if you just put the IEvent interface into the paramter
+@EventTarget
+public void onEvent(final IEvent event) {
+    //Here you should check which event it is
+}
+```
+```Java
+//It is possible to listen for more than 1 event in a method
+//The other event instances are null
+@EventTarget
+public void onEvent(final Event1 event1, final Event2 event2) {
+    //If event1 is called event2 == null
+}
+```
+```Java
+//You can listen to events without needing them in your parameter
+//The instance of other events in the parameters (if there are any) are null
+@EventTarget(noParamEvents = Event2.class)
+public void onEvent(final Event1 event1) {
+    //If event2 is called event1 == null
+}
+
+//You do not need any parameter if you listen to events using the annotation
+@EventTarget(noParamEvents = Event.class)
+public void onEvent() {
+}
+```
+```Java
+//Here an example of all fields in the @EventTarget annotation
+//Default: @EventTarget(priority = EnumEventPriority.NORMAL, type = EnumEventType.ALL, skipCancelled = false, noParamEvents = {})
+@EventTarget(priority = EnumEventPriority.LOW, type = EnumEventType.PRE, skipCancelled = true, noParamEvents = Event.class)
+public void onEvent() {
+}
+```
+```Java
+//Something like this is also "legal" but this will not listen to any events obviously
+@EventTarget
+public void onEvent() {
+}
+
+//This method does not have the @EventTarget annotation so this will also not listen to anything
+public void onEvent(final Event event) {
+}
+```
+
 ## Contribute
 If you want to contribute code please make sure it is kept in the same style as the original code:  
  - Method parameter should be final except you modify them.  
@@ -68,7 +115,8 @@ If you want to contribute code please make sure it is kept in the same style as 
  - Global fields should be final except you modify them.  
  - Global fields should generally be private and only accessed using getter and setter. Exceptions for this are static fields.  
  - Static fields always have an upper case name and spaces are replaced with underscores.  
- - Please avoid using streams. I don't like them (they always seem so slow in comparison with foreach loops).  
+ - Please avoid using streams. I don't like them (they always seem so slow in comparison with for loops).  
+ - Inlined if statements (both `boolean ? true : false` and `if(boolean) method();`) are ok as long as they do not get too long. And please avoid stacking them. It really makes code unreadable.  
 
 Just please keep it in the style as the other code.
 
