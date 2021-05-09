@@ -214,7 +214,7 @@ public class EventManager {
             pipelineNode.visitField(Opcodes.ACC_PUBLIC, "listener" + i, Type.getDescriptor(listener.getClass()), null, null);
         }
         { //Insert call method and all listener calls
-            MethodVisitor visitor = pipelineNode.visitMethod(Opcodes.ACC_PUBLIC, ReflectUtils.getMethodByArgs(IEventPipeline.class).getName(), "(" + Type.getDescriptor(IEvent.class) + ")V", null, new String[]{"java/lang/Throwable"});
+            MethodVisitor visitor = pipelineNode.visitMethod(Opcodes.ACC_PUBLIC, ReflectUtils.getMethodByArgs(IEventPipeline.class, IEvent.class).getName(), "(" + Type.getDescriptor(IEvent.class) + ")V", null, new String[]{"java/lang/Throwable"});
             { //Cast and IEvent interface to the actual event class and store it
                 visitor.visitVarInsn(Opcodes.ALOAD, 1);
                 visitor.visitTypeInsn(Opcodes.CHECKCAST, eventType.getName().replace(".", "/"));
