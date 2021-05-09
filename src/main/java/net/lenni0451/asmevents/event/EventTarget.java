@@ -27,4 +27,9 @@ public @interface EventTarget {
      */
     boolean skipCancelled() default false;
 
+    /**
+     * Events to listen to which do not need a parameter passed
+     */
+    Class<? extends IEvent>[] noParamEvents() default {};
+
 }

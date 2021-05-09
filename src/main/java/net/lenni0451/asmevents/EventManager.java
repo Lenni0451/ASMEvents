@@ -55,7 +55,7 @@ public class EventManager {
     public static void register(final Class<? extends IEvent> eventClass, final Object listener) {
         Objects.requireNonNull(listener);
         final Class<?> listenerClass = (listener instanceof Class<?> ? (Class<?>) listener : listener.getClass());
-        final List<Class<? extends IEvent>> updatedEvents = new ArrayList<>();
+        final Set<Class<? extends IEvent>> updatedEvents = new HashSet<>();
 
         for (Method method : listenerClass.getDeclaredMethods()) {
             EventTarget eventTarget = method.getDeclaredAnnotation(EventTarget.class);
@@ -75,6 +75,12 @@ public class EventManager {
                 //Cast is not unchecked, believe me
                 updatedEvents.add((Class<? extends IEvent>) type);
                 register((Class<? extends IEvent>) type, listener, method);
+            }
+            for (Class<? extends IEvent> type : eventTarget.noParamEvents()) {
+                if (eventClass != null && !eventClass.equals(type)) continue;
+
+                updatedEvents.add(type);
+                register(type, listener, method);
             }
         }
         updatePipelines(updatedEvents);
@@ -155,7 +161,7 @@ public class EventManager {
      *
      * @param eventTypes The list of events to recalculate
      */
-    private static void updatePipelines(final List<Class<? extends IEvent>> eventTypes) {
+    private static void updatePipelines(final Collection<Class<? extends IEvent>> eventTypes) {
         for (Class<? extends IEvent> eventType : eventTypes) updatePipeline(eventType);
     }
 
