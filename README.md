@@ -117,6 +117,21 @@ public void onEvent() {
 public void onEvent(final Event event) {
 }
 ```
+```Java
+//It is possible to add arguments to listener methods other than events
+//You may find this useful for reusing methods
+@EventTarget
+public void onEvent(final int i, final Event event, final Object o) {
+    //In this case all arguments other than the current event are null/their primitive counterpart
+    //Here i == 0 and o == null
+}
+
+//This also works with noParamEvents
+@EventTarget(noParamEvents = Event.class)
+public void onEvent(final int i) {
+    //Here also i == 0
+}
+```
 
 ```Java
 //This is the basic event call
