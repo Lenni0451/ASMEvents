@@ -57,7 +57,6 @@ public class EventManager {
         for (Method method : listenerClass.getDeclaredMethods()) {
             EventTarget eventTarget = method.getDeclaredAnnotation(EventTarget.class);
             if (eventTarget == null) continue;
-            if (method.getParameterCount() <= 0) continue;
             boolean onlyHasEvents = true;
             for (Class<?> type : method.getParameterTypes()) {
                 if (!IEvent.class.isAssignableFrom(type)) {
@@ -65,7 +64,7 @@ public class EventManager {
                     break;
                 }
             }
-            if (!onlyHasEvents) return;
+            if (!onlyHasEvents) continue;
             for (Class<?> type : method.getParameterTypes()) {
                 if (eventClass != null && !eventClass.equals(type)) continue;
 
