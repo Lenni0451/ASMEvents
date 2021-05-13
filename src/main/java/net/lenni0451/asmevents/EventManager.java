@@ -2,6 +2,7 @@ package net.lenni0451.asmevents;
 
 import net.lenni0451.asmevents.event.EventTarget;
 import net.lenni0451.asmevents.event.IEvent;
+import net.lenni0451.asmevents.event.PipelineSafety;
 import net.lenni0451.asmevents.event.enums.EnumEventType;
 import net.lenni0451.asmevents.event.types.ICancellableEvent;
 import net.lenni0451.asmevents.event.types.IStoppableEvent;
@@ -177,6 +178,7 @@ public class EventManager {
         final Map<Object, List<Method>> listenerMethods = EVENT_LISTENER.get(eventType);
         if (listenerMethods == null) return;
 
+        final PipelineSafety pipelineSafety = eventType.getDeclaredAnnotation(PipelineSafety.class);
         final List<Method> allMethods = new ArrayList<>();
         final Map<Method, Object> methodToInstance = new HashMap<>();
         final List<Object> allListener;
@@ -228,6 +230,16 @@ public class EventManager {
             for (Method method : allMethods) {
                 final EventTarget eventTarget = method.getDeclaredAnnotation(EventTarget.class);
                 Label jumpAfter = null;
+                Label endBlock = null;
+                Label catchBlock = null;
+                if (pipelineSafety != null) {
+                    final Label tryBlock = new Label();
+                    endBlock = new Label();
+                    catchBlock = new Label();
+
+                    visitor.visitTryCatchBlock(tryBlock, endBlock, catchBlock, "java/lang/Throwable");
+                    visitor.visitLabel(tryBlock);
+                }
 
                 if (IStoppableEvent.class.isAssignableFrom(eventType)) { //Check if the stoppable event is stopped and return if so
                     final Label skipReturn = new Label();
@@ -268,6 +280,17 @@ public class EventManager {
                         visitor.visitMethodInsn(Opcodes.INVOKESTATIC, method.getDeclaringClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);
                     } else {
                         visitor.visitMethodInsn(Opcodes.INVOKEVIRTUAL, method.getDeclaringClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);
+                    }
+                }
+                if (pipelineSafety != null) {
+                    if (jumpAfter == null) jumpAfter = new Label();
+                    visitor.visitLabel(endBlock);
+                    visitor.visitJumpInsn(Opcodes.GOTO, jumpAfter);
+                    visitor.visitLabel(catchBlock);
+                    if (pipelineSafety.print()) {
+                        visitor.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Throwable", "printStackTrace", "()V", false);
+                    } else {
+                        visitor.visitInsn(Opcodes.POP);
                     }
                 }
                 if (jumpAfter != null) visitor.visitLabel(jumpAfter);
