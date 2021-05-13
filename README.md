@@ -160,6 +160,46 @@ public static int multiply(int num) {
 }
 ```
 
+```Java
+//This is an example event class for the MathEvent from above
+public class MathEvent implements IEvent, ICancellableEvent, ITypedEvent {
+
+    private final EnumEventType type;
+    private int num;
+    private boolean cancelled;
+
+    public MathEvent(final EnumEventType type, final int num) {
+        this.type = type;
+        this.num = num;
+        this.cancelled = false;
+    }
+
+    @Override
+    public EnumEventType getType() {
+        return this.type;
+    }
+
+    public int getNum() {
+        return this.num;
+    }
+
+    public void setNum(final int num) {
+        this.num = num;
+    }
+
+    @Override
+    public boolean isCancelled() {
+        return this.cancelled;
+    }
+
+    @Override
+    public void setCancelled(boolean cancelled) {
+        this.cancelled = cancelled;
+    }
+
+}
+```
+
 ## Contribute
 If you want to contribute code please make sure it is kept in the same style as the original code:  
  - Method parameter should be final except you modify them.  
