@@ -77,7 +77,9 @@ There are 4 types of events
 | IStoppableEvent   | The stoppable event is the same as the cancelled but all following listeners get skipped                                                                                                     |
 | ITypedEvent       | The typed event can have two types `PRE` and `POST`. It is useful if an event is called at the beginning and end of a method                                                                 |
 
-All events have an already wrapped class to just extend which just contains the basic needed methods.
+All events have an already wrapped class to just extend which just contains the basic needed methods.  
+If any event listener in the pipeline throws an exception the whole pipeline breaks and all following listener won't get called. If you need the event pipeline to continue after a thrown exception you can add the `@PipelineSafety` annotation to the event where you want this extra safety.  
+There is the option to just print the catched exception or to do nothing with it.
 
 ## Other code snippets
 ```Java
