@@ -250,7 +250,7 @@ public class EventManager {
                     visitor.visitVarInsn(Opcodes.ALOAD, 4);
                     visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, ITypedEvent.class.getName().replace(".", "/"), ReflectUtils.getMethodByArgs(ITypedEvent.class).getName(), "()" + Type.getDescriptor(EnumEventType.class), true);
                     visitor.visitFieldInsn(Opcodes.GETSTATIC, EnumEventType.class.getName().replace(".", "/"), ReflectUtils.getEnumField(eventTarget.type()).getName(), Type.getDescriptor(EnumEventType.class));
-                    visitor.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Enum", "equals", "(Ljava/lang/Object;)Z");
+                    visitor.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Enum", "equals", "(Ljava/lang/Object;)Z", false);
                     visitor.visitJumpInsn(Opcodes.IFEQ, jumpAfter);
                 }
                 {
