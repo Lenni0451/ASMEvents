@@ -12,9 +12,9 @@ public class Test {
         System.out.println();
     }
 
-    @EventTarget(noParamEvents = TestEvent2.class)
-    public static void ab(final TestEvent1 event, final TestEvent1 event2) {
-        System.out.println(event);
+    @EventTarget(noParamEvents = {TestEvent1.class, TestEvent2.class})
+    public static void ab(final float coolFloat, boolean test, Double dfd) {
+        System.out.println(coolFloat + " " + test + " " + dfd);
     }
 
 }

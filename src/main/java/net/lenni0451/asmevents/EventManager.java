@@ -57,16 +57,9 @@ public class EventManager {
         for (Method method : listenerClass.getDeclaredMethods()) {
             EventTarget eventTarget = method.getDeclaredAnnotation(EventTarget.class);
             if (eventTarget == null) continue;
-            boolean onlyHasEvents = true;
-            for (Class<?> type : method.getParameterTypes()) {
-                if (!IEvent.class.isAssignableFrom(type)) {
-                    onlyHasEvents = false;
-                    break;
-                }
-            }
-            if (!onlyHasEvents) continue;
             for (Class<?> type : method.getParameterTypes()) {
                 if (eventClass != null && !eventClass.equals(type)) continue;
+                if (!IEvent.class.isAssignableFrom(type)) continue;
 
                 //Cast is not unchecked, believe me
                 updatedEvents.add((Class<? extends IEvent>) type);
@@ -268,7 +261,7 @@ public class EventManager {
                     }
                     for (Class<?> param : method.getParameterTypes()) {
                         if (param.equals(eventType)) visitor.visitVarInsn(Opcodes.ALOAD, 2);
-                        else visitor.visitInsn(Opcodes.ACONST_NULL);
+                        else ASMUtils.generateNullValue(visitor, param);
                     }
                     if (Modifier.isStatic(method.getModifiers())) {
                         visitor.visitMethodInsn(Opcodes.INVOKESTATIC, method.getDeclaringClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);

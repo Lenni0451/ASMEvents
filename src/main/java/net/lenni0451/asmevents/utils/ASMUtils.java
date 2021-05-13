@@ -21,4 +21,18 @@ public class ASMUtils {
         visitor.visitEnd();
     }
 
+    public static void generateNullValue(final MethodVisitor visitor, final Class<?> type) {
+        if (boolean.class.equals(type) || byte.class.equals(type) || short.class.equals(type) || char.class.equals(type) || int.class.equals(type)) {
+            visitor.visitInsn(Opcodes.ICONST_0);
+        } else if (long.class.equals(type)) {
+            visitor.visitInsn(Opcodes.LCONST_0);
+        } else if (float.class.equals(type)) {
+            visitor.visitInsn(Opcodes.FCONST_0);
+        } else if (double.class.equals(type)) {
+            visitor.visitInsn(Opcodes.DCONST_0);
+        } else {
+            visitor.visitInsn(Opcodes.ACONST_NULL);
+        }
+    }
+
 }
