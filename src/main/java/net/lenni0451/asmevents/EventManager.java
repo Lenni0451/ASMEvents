@@ -6,11 +6,10 @@ import net.lenni0451.asmevents.event.enums.EnumEventType;
 import net.lenni0451.asmevents.event.types.ICancellableEvent;
 import net.lenni0451.asmevents.event.types.IStoppableEvent;
 import net.lenni0451.asmevents.event.types.ITypedEvent;
-import net.lenni0451.asmevents.internal.IErrorListener;
 import net.lenni0451.asmevents.internal.IEventPipeline;
+import net.lenni0451.asmevents.internal.PipelineLoaderClassLoadProvider;
 import net.lenni0451.asmevents.internal.RuntimeThrowErrorListener;
 import net.lenni0451.asmevents.utils.ASMUtils;
-import net.lenni0451.asmevents.utils.PipelineLoader;
 import net.lenni0451.asmevents.utils.ReflectUtils;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
@@ -30,6 +29,7 @@ public class EventManager {
     private static final Map<Class<? extends IEvent>, Map<Object, List<Method>>> EVENT_LISTENER = new ConcurrentHashMap<>();
     private static final Map<Class<? extends IEvent>, IEventPipeline> EVENT_PIPELINES = new ConcurrentHashMap<>();
     private static IErrorListener ERROR_LISTENER = new RuntimeThrowErrorListener();
+    private static IClassLoadProvider CLASS_LOAD_PROVIDER = new PipelineLoaderClassLoadProvider();
 
     /**
      * Register all events in the class<br>
@@ -276,8 +276,7 @@ public class EventManager {
         }
 
         byte[] data = ASMUtils.toBytes(pipelineNode);
-        PipelineLoader pipelineLoader = new PipelineLoader(EventManager.class);
-        Class<? extends IEventPipeline> pipelineClass = pipelineLoader.loadPipeline(pipelineNode.name.replace("/", "."), data);
+        Class<? extends IEventPipeline> pipelineClass = CLASS_LOAD_PROVIDER.loadClass(pipelineNode.name.replace("/", "."), data);
         try {
             IEventPipeline pipeline = (IEventPipeline) pipelineClass.getDeclaredConstructors()[0].newInstance();
             {
@@ -297,7 +296,7 @@ public class EventManager {
 
     /**
      * Set the handler of unhandled exceptions<br>
-     * By default all exceptions are thrown as RuntimeExceptions.<br>
+     * By default all exceptions are thrown as RuntimeExceptions<br>
      * You may want to just print them to prevent the program from crashing
      *
      * @param errorListener The listener
@@ -306,6 +305,18 @@ public class EventManager {
         Objects.requireNonNull(errorListener);
 
         ERROR_LISTENER = errorListener;
+    }
+
+    /**
+     * The the provider for loading the internal pipeline classes<br>
+     * By default all pipeline classes are loaded using a custom class loader
+     *
+     * @param classLoadProvider The provider
+     */
+    public static void setClassLoadProvider(final IClassLoadProvider classLoadProvider) {
+        Objects.requireNonNull(classLoadProvider);
+
+        CLASS_LOAD_PROVIDER = classLoadProvider;
     }
 
 }

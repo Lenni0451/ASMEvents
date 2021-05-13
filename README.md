@@ -56,7 +56,15 @@ By default the error listener rethrows all exception as a runtime exception but 
 To do that just call the `setErrorListener` method.
 ```Java
 //The error listener needs to implement the IErrorListener interface
-EventManager.addErrorListener();
+EventManager.setErrorListener(new ErrorListenerImpl());
+```
+
+The generated pipeline classes for the events are loaded using a custom ClassLoader by default.  
+You may want to change how they get loaded so there is an interface to provide class loading.  
+To the set class load provider just call the `setClassLoadProvider` method.
+```Java
+//The class load provider needs to implement the IClassLoadProvider interface
+EventManager.setClassLoadProvider(new ClassLoadProviderImpl());
 ```
 
 ### Event types

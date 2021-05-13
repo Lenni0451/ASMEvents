@@ -1,4 +1,4 @@
-package net.lenni0451.asmevents.internal;
+package net.lenni0451.asmevents;
 
 public interface IErrorListener {
 
