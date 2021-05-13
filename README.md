@@ -21,23 +21,23 @@ The `@EventTarget` annotation has some useful fields you can use.
 ### EventManager
 The EventManager is the main class you will be working with.  
 It handles event listener registering, unregistering and calling.  
-To register an event listener method call.
+To register an event listener method call the `EventManager.register()` method.
 ```Java
 //Register a listener
-EventManager.register(Listener.call); //Static listener
+EventManager.register(Listener.class); //Static listener
 EventManager.register(new Listener()); //Non static listener
 
 //Register a listener to only a specific event
-EventManager.register(Event.class, Listener.call); //Static listener
+EventManager.register(Event.class, Listener.class); //Static listener
 EventManager.register(Event.class, new Listener()); //Non static listener
 
 
 //Unregister a listener
-EventManager.unregister(Listener.call); //Static listener
+EventManager.unregister(Listener.class); //Static listener
 EventManager.unregister(new Listener()); //Non static listener
 
 //Unregister a listener from only a specific event
-EventManager.unregister(Event.class, Listener.call); //Static listener
+EventManager.unregister(Event.class, Listener.class); //Static listener
 EventManager.unregister(Event.class, new Listener()); //Non static listener
 ```
 You can either pass an listener class or instance to the `register` method.  
