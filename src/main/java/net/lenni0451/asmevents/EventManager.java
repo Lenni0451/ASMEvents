@@ -1,6 +1,5 @@
 package net.lenni0451.asmevents;
 
-import jdk.internal.org.objectweb.asm.Type;
 import net.lenni0451.asmevents.event.EventTarget;
 import net.lenni0451.asmevents.event.IEvent;
 import net.lenni0451.asmevents.event.enums.EnumEventType;
@@ -16,6 +15,7 @@ import net.lenni0451.asmevents.utils.ReflectUtils;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
 
 import java.lang.reflect.Field;
