@@ -194,7 +194,7 @@ public class EventManager {
                 return o2target.priority().compareTo(o1target.priority());
             });
             allListener = new ArrayList<>(listenerMethods.keySet());
-            allListener.removeIf(o -> o instanceof Class<?>);
+            allListener.removeIf(o -> o instanceof Class<?>); //Remove all static listener classes as we do not need an instance of them
         }
 
         ClassNode pipelineNode = new ClassNode();
@@ -203,24 +203,24 @@ public class EventManager {
         pipelineNode.sourceDebug = "ASMEvents by Lenni0451"; //Some credits for me :)
         ASMUtils.addDefaultConstructor(pipelineNode);
 
-        for (int i = 0; i < allListener.size(); i++) {
+        for (int i = 0; i < allListener.size(); i++) { //Add a field for all listener instances we need
             final Object listener = allListener.get(i);
 
             pipelineNode.visitField(Opcodes.ACC_PUBLIC, "listener" + i, Type.getDescriptor(listener.getClass()), null, null);
         }
         { //Insert call method and all listener calls
             MethodVisitor visitor = pipelineNode.visitMethod(Opcodes.ACC_PUBLIC, ReflectUtils.getMethodByArgs(IEventPipeline.class, IEvent.class).getName(), "(" + Type.getDescriptor(IEvent.class) + ")V", null, new String[]{"java/lang/Throwable"});
-            { //Cast and IEvent interface to the actual event class and store it
+            { //Cast an IEvent implementation to the actual event class and store it
                 visitor.visitVarInsn(Opcodes.ALOAD, 1);
                 visitor.visitTypeInsn(Opcodes.CHECKCAST, eventType.getName().replace(".", "/"));
                 visitor.visitVarInsn(Opcodes.ASTORE, 2);
             }
-            if (ICancellableEvent.class.isAssignableFrom(eventType)) {
+            if (ICancellableEvent.class.isAssignableFrom(eventType)) { //Cast an IEvent implementation to a ICancellableEvent if it can be cancelled and store it
                 visitor.visitVarInsn(Opcodes.ALOAD, 1);
                 visitor.visitTypeInsn(Opcodes.CHECKCAST, ICancellableEvent.class.getName().replace(".", "/"));
                 visitor.visitVarInsn(Opcodes.ASTORE, 3);
             }
-            if (ITypedEvent.class.isAssignableFrom(eventType)) {
+            if (ITypedEvent.class.isAssignableFrom(eventType)) { //Cast an IEvent implementation to a ITypedEvent if it is typed and store it
                 visitor.visitVarInsn(Opcodes.ALOAD, 1);
                 visitor.visitTypeInsn(Opcodes.CHECKCAST, ITypedEvent.class.getName().replace(".", "/"));
                 visitor.visitVarInsn(Opcodes.ASTORE, 4);
@@ -229,7 +229,7 @@ public class EventManager {
                 final EventTarget eventTarget = method.getDeclaredAnnotation(EventTarget.class);
                 Label jumpAfter = null;
 
-                if (IStoppableEvent.class.isAssignableFrom(eventType)) {
+                if (IStoppableEvent.class.isAssignableFrom(eventType)) { //Check if the stoppable event is stopped and return if so
                     final Label skipReturn = new Label();
 
                     visitor.visitVarInsn(Opcodes.ALOAD, 3);
@@ -237,14 +237,14 @@ public class EventManager {
                     visitor.visitJumpInsn(Opcodes.IFEQ, skipReturn);
                     visitor.visitInsn(Opcodes.RETURN);
                     visitor.visitLabel(skipReturn);
-                } else if (ICancellableEvent.class.isAssignableFrom(eventType) && eventTarget.skipCancelled()) { //We don't need to check if it is cancelled if the event is stoppable
+                } else if (ICancellableEvent.class.isAssignableFrom(eventType) && eventTarget.skipCancelled()) { //Check if a cancellable event is cancelled and we do not want to listen for it
                     if (jumpAfter == null) jumpAfter = new Label();
 
                     visitor.visitVarInsn(Opcodes.ALOAD, 3);
                     visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, ICancellableEvent.class.getName().replace(".", "/"), ReflectUtils.getMethodByArgs(ICancellableEvent.class).getName(), "()Z", true);
                     visitor.visitJumpInsn(Opcodes.IFNE, jumpAfter);
                 }
-                if (ITypedEvent.class.isAssignableFrom(eventType) && !eventTarget.type().equals(EnumEventType.ALL)) {
+                if (ITypedEvent.class.isAssignableFrom(eventType) && !eventTarget.type().equals(EnumEventType.ALL)) { //Check if the type of a typed event is the wanted type
                     if (jumpAfter == null) jumpAfter = new Label();
 
                     visitor.visitVarInsn(Opcodes.ALOAD, 4);
@@ -254,15 +254,16 @@ public class EventManager {
                     visitor.visitJumpInsn(Opcodes.IFEQ, jumpAfter);
                 }
                 {
-                    if (!Modifier.isStatic(method.getModifiers())) {
+                    if (!Modifier.isStatic(method.getModifiers())) { //Load the listener instance if the listener method is not static
                         final Object listener = methodToInstance.get(method);
                         visitor.visitVarInsn(Opcodes.ALOAD, 0);
                         visitor.visitFieldInsn(Opcodes.GETFIELD, pipelineNode.name, "listener" + allListener.indexOf(listener), Type.getDescriptor(listener.getClass()));
                     }
-                    for (Class<?> param : method.getParameterTypes()) {
+                    for (Class<?> param : method.getParameterTypes()) { //Load all method paramenter or load null if it is not the current event
                         if (param.equals(eventType)) visitor.visitVarInsn(Opcodes.ALOAD, 2);
                         else ASMUtils.generateNullValue(visitor, param);
                     }
+                    //And finally actually call the listener method
                     if (Modifier.isStatic(method.getModifiers())) {
                         visitor.visitMethodInsn(Opcodes.INVOKESTATIC, method.getDeclaringClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);
                     } else {
@@ -275,11 +276,13 @@ public class EventManager {
             visitor.visitEnd();
         }
 
-        byte[] data = ASMUtils.toBytes(pipelineNode);
-        Class<? extends IEventPipeline> pipelineClass = CLASS_LOAD_PROVIDER.loadClass(pipelineNode.name.replace("/", "."), data);
         try {
+            //Load the pipeline class
+            Class<? extends IEventPipeline> pipelineClass = CLASS_LOAD_PROVIDER.loadClass(pipelineNode.name.replace("/", "."), ASMUtils.toBytes(pipelineNode));
+
+            //Create an instance of the loaded pipeline class
             IEventPipeline pipeline = (IEventPipeline) pipelineClass.getDeclaredConstructors()[0].newInstance();
-            {
+            { //Use reflection to set all listener instance fields
                 Field[] fields = pipeline.getClass().getDeclaredFields();
                 for (int i = 0; i < fields.length; i++) {
                     Field field = fields[i];
