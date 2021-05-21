@@ -31,7 +31,7 @@ public class EventManager {
     private static final Map<Class<? extends IEvent>, Map<Object, List<Method>>> EVENT_LISTENER = new ConcurrentHashMap<>();
     private static final Map<Class<? extends IEvent>, IEventPipeline> EVENT_PIPELINES = new ConcurrentHashMap<>();
     private static IErrorListener ERROR_LISTENER = new RuntimeThrowErrorListener();
-    private static IClassLoadProvider CLASS_LOAD_PROVIDER = new PipelineLoaderClassLoadProvider();
+    private static IClassLoadProvider CLASS_LOAD_PROVIDER = new PipelineLoaderClassLoadProvider(EventManager.class);
 
     /**
      * Register all events in the class<br>
