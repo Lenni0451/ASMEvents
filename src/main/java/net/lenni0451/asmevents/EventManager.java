@@ -1,5 +1,6 @@
 package net.lenni0451.asmevents;
 
+import net.lenni0451.asmevents.event.EnumPipelineSafety;
 import net.lenni0451.asmevents.event.EventTarget;
 import net.lenni0451.asmevents.event.IEvent;
 import net.lenni0451.asmevents.event.PipelineSafety;
@@ -205,6 +206,9 @@ public class EventManager {
         pipelineNode.sourceDebug = "ASMEvents by Lenni0451"; //Some credits for me :)
         ASMUtils.addDefaultConstructor(pipelineNode);
 
+        if (pipelineSafety != null && pipelineSafety.value().equals(EnumPipelineSafety.ERROR_LISTENER)) { //Add the errorListener field if needed
+            pipelineNode.visitField(Opcodes.ACC_PUBLIC, "errorListener", Type.getDescriptor(IErrorListener.class), null, null);
+        }
         for (int i = 0; i < allListener.size(); i++) { //Add a field for all listener instances we need
             final Object listener = allListener.get(i);
 
@@ -287,10 +291,19 @@ public class EventManager {
                     visitor.visitLabel(endBlock);
                     visitor.visitJumpInsn(Opcodes.GOTO, jumpAfter);
                     visitor.visitLabel(catchBlock);
-                    if (pipelineSafety.print()) {
-                        visitor.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Throwable", "printStackTrace", "()V", false);
-                    } else {
-                        visitor.visitInsn(Opcodes.POP);
+                    switch (pipelineSafety.value()) {
+                        case PRINT: //Print the exception
+                            visitor.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Throwable", "printStackTrace", "()V", false);
+                            break;
+                        case ERROR_LISTENER: //Call the error listener
+                            visitor.visitVarInsn(Opcodes.ALOAD, 0);
+                            visitor.visitFieldInsn(Opcodes.GETFIELD, pipelineNode.name, "errorListener", Type.getDescriptor(IErrorListener.class));
+                            visitor.visitInsn(Opcodes.SWAP);
+                            final Method onExceptionMethod = ReflectUtils.getMethodByArgs(IErrorListener.class, Throwable.class);
+                            visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, IErrorListener.class.getName().replace(".", "/"), onExceptionMethod.getName(), Type.getMethodDescriptor(onExceptionMethod), true);
+                            break;
+                        case IGNORE: //Pop the exception of the stack
+                            visitor.visitInsn(Opcodes.POP);
                     }
                 }
                 if (jumpAfter != null) visitor.visitLabel(jumpAfter);
@@ -305,8 +318,14 @@ public class EventManager {
 
             //Create an instance of the loaded pipeline class
             IEventPipeline pipeline = (IEventPipeline) pipelineClass.getDeclaredConstructors()[0].newInstance();
-            { //Use reflection to set all listener instance fields
+            { //Use reflection to set all listener instance fields and error listener if needed
                 Field[] fields = pipeline.getClass().getDeclaredFields();
+                if (fields.length > 0 && fields[0].getType().equals(IErrorListener.class)) {
+                    Field field = fields[0];
+                    field.setAccessible(true);
+                    field.set(pipeline, ERROR_LISTENER);
+                    fields = Arrays.copyOfRange(fields, 1, fields.length); //Cut the error listener field
+                }
                 for (int i = 0; i < fields.length; i++) {
                     Field field = fields[i];
                     field.setAccessible(true);

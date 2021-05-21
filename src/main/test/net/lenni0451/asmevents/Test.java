@@ -5,6 +5,9 @@ import net.lenni0451.asmevents.event.EventTarget;
 public class Test {
 
     public static void main(String[] args) {
+//        EventManager.setErrorListener(Throwable::printStackTrace);
+        EventManager.setErrorListener((e) -> System.out.println("ERROR!"));
+
         EventManager.register(Test.class);
         EventManager.call(new TestEvent1());
     }

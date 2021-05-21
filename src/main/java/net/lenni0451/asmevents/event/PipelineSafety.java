@@ -9,6 +9,6 @@ import java.lang.annotation.Target;
 @Target(ElementType.TYPE)
 public @interface PipelineSafety {
 
-    boolean print() default true;
+    EnumPipelineSafety value() default EnumPipelineSafety.PRINT;
 
 }
