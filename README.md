@@ -1,5 +1,6 @@
 # ASMEvents
-A fast and feature rich Event library for Java using ASM to dynamically generate executor classes.
+A fast and feature rich Event library for Java using ASM to dynamically generate executor classes.  
+The library has full obfuscation support and allows for multithreaded event access even for timing critical events.
 
 ## Usage
 ### EventTarget annotation
