@@ -342,7 +342,9 @@ public class EventManager {
     /**
      * Set the handler of unhandled exceptions<br>
      * By default all exceptions are thrown as RuntimeExceptions<br>
-     * You may want to just print them to prevent the program from crashing
+     * You may want to just print them to prevent the program from crashing<br>
+     * <br>
+     * If an event has the {@link PipelineSafety} annotation and uses {@link EnumPipelineSafety#ERROR_LISTENER} the pipeline of the event has to be rebuilt to update the error listener
      *
      * @param errorListener The listener
      */
