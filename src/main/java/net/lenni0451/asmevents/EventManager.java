@@ -219,8 +219,8 @@ public class EventManager {
                 visitor.visitTypeInsn(Opcodes.CHECKCAST, ITypedEvent.class.getName().replace(".", "/"));
                 visitor.visitVarInsn(Opcodes.ASTORE, 3);
             }
-            int wrapperIndex = 0;
-            for (Tuple<Method, IWrappedCaller> method : allMethods) {
+            for (int i = 0; i < allMethods.size(); i++) {
+                Tuple<Method, IWrappedCaller> method = allMethods.get(i);
                 final EventTarget eventTarget = method.getA().getDeclaredAnnotation(EventTarget.class);
                 Label jumpAfter = null;
                 Label endBlock = null;
@@ -260,7 +260,7 @@ public class EventManager {
                 }
                 {
                     visitor.visitVarInsn(Opcodes.ALOAD, 0);
-                    visitor.visitFieldInsn(Opcodes.GETFIELD, pipelineNode.name, "listener" + wrapperIndex++, Type.getDescriptor(IWrappedCaller.class));
+                    visitor.visitFieldInsn(Opcodes.GETFIELD, pipelineNode.name, "listener" + i, Type.getDescriptor(IWrappedCaller.class));
                     visitor.visitVarInsn(Opcodes.ALOAD, 1);
                     //And finally actually call the listener method
                     Method m = ReflectUtils.getMethodByArgs(IWrappedCaller.class, IEvent.class);
