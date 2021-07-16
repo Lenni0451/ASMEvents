@@ -20,16 +20,17 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
 
+import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 public class EventManager {
 
-    private static final Map<Class<? extends IEvent>, Map<Object, List<Method>>> EVENT_LISTENER = new ConcurrentHashMap<>();
+    private static final Map<Class<? extends IEvent>, Map<Object, Map<Method, IWrappedCaller>>> EVENT_LISTENER = new ConcurrentHashMap<>();
     private static final Map<Class<? extends IEvent>, IEventPipeline> EVENT_PIPELINES = new ConcurrentHashMap<>();
     private static IErrorListener ERROR_LISTENER = new RuntimeThrowErrorListener();
 
@@ -92,10 +93,10 @@ public class EventManager {
         if (listener instanceof Class<?> && !Modifier.isStatic(method.getModifiers())) return;
         if (!(listener instanceof Class<?>) && Modifier.isStatic(method.getModifiers())) return;
 
-        final Map<Object, List<Method>> listenerClassToMethods = EVENT_LISTENER.computeIfAbsent(eventClass, c -> new HashMap<>());
-        final List<Method> methods = listenerClassToMethods.computeIfAbsent(listener, c -> new CopyOnWriteArrayList<>());
+        final Map<Object, Map<Method, IWrappedCaller>> listenerClassToMethods = EVENT_LISTENER.computeIfAbsent(eventClass, c -> new HashMap<>());
+        final Map<Method, IWrappedCaller> methods = listenerClassToMethods.computeIfAbsent(listener, c -> new ConcurrentHashMap<>());
 
-        if (!methods.contains(method)) methods.add(method);
+        if (!methods.containsKey(method)) methods.put(method, wrap(listener, method, eventClass));
     }
 
 
@@ -109,7 +110,7 @@ public class EventManager {
     public static void unregister(final Object listener) {
         Objects.requireNonNull(listener);
 
-        for (Map.Entry<Class<? extends IEvent>, Map<Object, List<Method>>> entry : EVENT_LISTENER.entrySet()) {
+        for (Map.Entry<Class<? extends IEvent>, Map<Object, Map<Method, IWrappedCaller>>> entry : EVENT_LISTENER.entrySet()) {
             if (entry.getValue().containsKey(listener)) unregister(entry.getKey(), listener);
         }
     }
@@ -176,32 +177,27 @@ public class EventManager {
      * @param eventType The event to recalculate
      */
     private static void updatePipeline(final Class<? extends IEvent> eventType) {
-        final Map<Object, List<Method>> listenerMethods = EVENT_LISTENER.get(eventType);
+        final Map<Object, Map<Method, IWrappedCaller>> listenerMethods = EVENT_LISTENER.get(eventType);
         if (listenerMethods == null) return;
 
         final PipelineSafety pipelineSafety = eventType.getDeclaredAnnotation(PipelineSafety.class);
         final List<Method> allMethods = new ArrayList<>();
-        final Map<Method, Object> methodToInstance = new HashMap<>();
-        final List<Object> allListener;
+        final Map<Method, IWrappedCaller> methodToWrapper = new LinkedHashMap<>();
 
         { //Prepare list of all methods and map to map them back to the instance
-            for (Map.Entry<Object, List<Method>> entry : listenerMethods.entrySet()) {
-                for (Method method : entry.getValue()) {
-                    allMethods.add(method);
-                    methodToInstance.put(method, entry.getKey());
-                }
+            for (Map.Entry<Object, Map<Method, IWrappedCaller>> entry : listenerMethods.entrySet()) {
+                allMethods.addAll(entry.getValue().keySet());
+                methodToWrapper.putAll(entry.getValue());
             }
             allMethods.sort((o1, o2) -> { //Sort all methods by priority
                 EventTarget o1target = o1.getDeclaredAnnotation(EventTarget.class);
                 EventTarget o2target = o2.getDeclaredAnnotation(EventTarget.class);
                 return o2target.priority().compareTo(o1target.priority());
             });
-            allListener = new ArrayList<>(listenerMethods.keySet());
-            allListener.removeIf(o -> o instanceof Class<?>); //Remove all static listener classes as we do not need an instance of them
         }
 
         ClassNode pipelineNode = new ClassNode();
-        pipelineNode.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, "net/lenni0451/asmevents/" + eventType.getSimpleName() + "Pipeline", null, "java/lang/Object", new String[]{IEventPipeline.class.getName().replace(".", "/")});
+        pipelineNode.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, "net/lenni0451/asmevents/" + eventType.getSimpleName() + "Pipeline" + System.nanoTime(), null, "java/lang/Object", new String[]{IEventPipeline.class.getName().replace(".", "/")});
         pipelineNode.sourceFile = eventType.getName() + " Pipeline"; //This shows when an exception is printed. Some nice to have debug details
         pipelineNode.sourceDebug = "ASMEvents by Lenni0451"; //Some credits for me :)
         ASMUtils.addDefaultConstructor(pipelineNode);
@@ -209,28 +205,25 @@ public class EventManager {
         if (pipelineSafety != null && pipelineSafety.value().equals(EnumPipelineSafety.ERROR_LISTENER)) { //Add the errorListener field if needed
             pipelineNode.visitField(Opcodes.ACC_PUBLIC, "errorListener", Type.getDescriptor(IErrorListener.class), null, null);
         }
-        for (int i = 0; i < allListener.size(); i++) { //Add a field for all listener instances we need
-            final Object listener = allListener.get(i);
-
-            pipelineNode.visitField(Opcodes.ACC_PUBLIC, "listener" + i, Type.getDescriptor(listener.getClass()), null, null);
+        {
+            int i = 0;
+            for (Map.Entry<Method, IWrappedCaller> ignored : methodToWrapper.entrySet()) {
+                pipelineNode.visitField(Opcodes.ACC_PUBLIC, "listener" + i++, Type.getDescriptor(IWrappedCaller.class), null, null);
+            }
         }
         { //Insert call method and all listener calls
             MethodVisitor visitor = pipelineNode.visitMethod(Opcodes.ACC_PUBLIC, ReflectUtils.getMethodByArgs(IEventPipeline.class, IEvent.class).getName(), "(" + Type.getDescriptor(IEvent.class) + ")V", null, new String[]{"java/lang/Throwable"});
-            { //Cast an IEvent implementation to the actual event class and store it
-                visitor.visitVarInsn(Opcodes.ALOAD, 1);
-                visitor.visitTypeInsn(Opcodes.CHECKCAST, eventType.getName().replace(".", "/"));
-                visitor.visitVarInsn(Opcodes.ASTORE, 2);
-            }
             if (ICancellableEvent.class.isAssignableFrom(eventType)) { //Cast an IEvent implementation to a ICancellableEvent if it can be cancelled and store it
                 visitor.visitVarInsn(Opcodes.ALOAD, 1);
                 visitor.visitTypeInsn(Opcodes.CHECKCAST, ICancellableEvent.class.getName().replace(".", "/"));
-                visitor.visitVarInsn(Opcodes.ASTORE, 3);
+                visitor.visitVarInsn(Opcodes.ASTORE, 2);
             }
             if (ITypedEvent.class.isAssignableFrom(eventType)) { //Cast an IEvent implementation to a ITypedEvent if it is typed and store it
                 visitor.visitVarInsn(Opcodes.ALOAD, 1);
                 visitor.visitTypeInsn(Opcodes.CHECKCAST, ITypedEvent.class.getName().replace(".", "/"));
-                visitor.visitVarInsn(Opcodes.ASTORE, 4);
+                visitor.visitVarInsn(Opcodes.ASTORE, 3);
             }
+            int wrapperIndex = 0;
             for (Method method : allMethods) {
                 final EventTarget eventTarget = method.getDeclaredAnnotation(EventTarget.class);
                 Label jumpAfter = null;
@@ -248,7 +241,7 @@ public class EventManager {
                 if (IStoppableEvent.class.isAssignableFrom(eventType)) { //Check if the stoppable event is stopped and return if so
                     final Label skipReturn = new Label();
 
-                    visitor.visitVarInsn(Opcodes.ALOAD, 3);
+                    visitor.visitVarInsn(Opcodes.ALOAD, 2);
                     visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, ICancellableEvent.class.getName().replace(".", "/"), ReflectUtils.getMethodByArgs(ICancellableEvent.class).getName(), "()Z", true);
                     visitor.visitJumpInsn(Opcodes.IFEQ, skipReturn);
                     visitor.visitInsn(Opcodes.RETURN);
@@ -256,35 +249,26 @@ public class EventManager {
                 } else if (ICancellableEvent.class.isAssignableFrom(eventType) && eventTarget.skipCancelled()) { //Check if a cancellable event is cancelled and we do not want to listen for it
                     if (jumpAfter == null) jumpAfter = new Label();
 
-                    visitor.visitVarInsn(Opcodes.ALOAD, 3);
+                    visitor.visitVarInsn(Opcodes.ALOAD, 2);
                     visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, ICancellableEvent.class.getName().replace(".", "/"), ReflectUtils.getMethodByArgs(ICancellableEvent.class).getName(), "()Z", true);
                     visitor.visitJumpInsn(Opcodes.IFNE, jumpAfter);
                 }
                 if (ITypedEvent.class.isAssignableFrom(eventType) && !eventTarget.type().equals(EnumEventType.ALL)) { //Check if the type of a typed event is the wanted type
                     if (jumpAfter == null) jumpAfter = new Label();
 
-                    visitor.visitVarInsn(Opcodes.ALOAD, 4);
+                    visitor.visitVarInsn(Opcodes.ALOAD, 3);
                     visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, ITypedEvent.class.getName().replace(".", "/"), ReflectUtils.getMethodByArgs(ITypedEvent.class).getName(), "()" + Type.getDescriptor(EnumEventType.class), true);
                     visitor.visitFieldInsn(Opcodes.GETSTATIC, EnumEventType.class.getName().replace(".", "/"), ReflectUtils.getEnumField(eventTarget.type()).getName(), Type.getDescriptor(EnumEventType.class));
                     visitor.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Enum", "equals", "(Ljava/lang/Object;)Z", false);
                     visitor.visitJumpInsn(Opcodes.IFEQ, jumpAfter);
                 }
                 {
-                    if (!Modifier.isStatic(method.getModifiers())) { //Load the listener instance if the listener method is not static
-                        final Object listener = methodToInstance.get(method);
-                        visitor.visitVarInsn(Opcodes.ALOAD, 0);
-                        visitor.visitFieldInsn(Opcodes.GETFIELD, pipelineNode.name, "listener" + allListener.indexOf(listener), Type.getDescriptor(listener.getClass()));
-                    }
-                    for (Class<?> param : method.getParameterTypes()) { //Load all method parameter or load null if it is not the current event
-                        if (param.equals(eventType)) visitor.visitVarInsn(Opcodes.ALOAD, 2);
-                        else ASMUtils.generateNullValue(visitor, param);
-                    }
+                    visitor.visitVarInsn(Opcodes.ALOAD, 0);
+                    visitor.visitFieldInsn(Opcodes.GETFIELD, pipelineNode.name, "listener" + wrapperIndex++, Type.getDescriptor(IWrappedCaller.class));
+                    visitor.visitVarInsn(Opcodes.ALOAD, 1);
                     //And finally actually call the listener method
-                    if (Modifier.isStatic(method.getModifiers())) {
-                        visitor.visitMethodInsn(Opcodes.INVOKESTATIC, method.getDeclaringClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);
-                    } else {
-                        visitor.visitMethodInsn(Opcodes.INVOKEVIRTUAL, method.getDeclaringClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);
-                    }
+                    method = ReflectUtils.getMethodByArgs(IWrappedCaller.class, IEvent.class);
+                    visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, IWrappedCaller.class.getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), true);
                 }
                 if (pipelineSafety != null) {
                     if (jumpAfter == null) jumpAfter = new Label();
@@ -313,6 +297,7 @@ public class EventManager {
         }
 
         try {
+            Files.write(new File("C:/Users/User/Desktop/cool.class").toPath(), ASMUtils.toBytes(pipelineNode));
             //Load the pipeline class
             Class<? extends IEventPipeline> pipelineClass = ClassDefiner.define(EventManager.class, pipelineNode.name.replace("/", "."), ASMUtils.toBytes(pipelineNode));
 
@@ -326,10 +311,11 @@ public class EventManager {
                     field.set(pipeline, ERROR_LISTENER);
                     fields = Arrays.copyOfRange(fields, 1, fields.length); //Cut the error listener field
                 }
-                for (int i = 0; i < fields.length; i++) {
-                    Field field = fields[i];
+                int index = 0;
+                for (IWrappedCaller wrapper : methodToWrapper.values()) {
+                    Field field = fields[index++];
                     field.setAccessible(true);
-                    field.set(pipeline, allListener.get(i));
+                    field.set(pipeline, wrapper);
                 }
             }
             EVENT_PIPELINES.put(eventType, pipeline);

@@ -20,6 +20,7 @@ public class ClassLoaderTest {
         obb.call(new CoolEvent());
         obb2.call(new CoolEvent());
         EventManager.register(ob);
+        EventManager.register(ob.getClass());
         EventManager.call(new CoolEvent());
     }
 
@@ -48,9 +49,12 @@ public class ClassLoaderTest {
         {
             MethodNode listener = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "listenStatic", "(L" + CoolEvent.class.getName().replace(".", "/") + ";)V", null, null);
             listener.instructions.add(new FieldInsnNode(Opcodes.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;"));
+            listener.instructions.add(new InsnNode(Opcodes.DUP));
             listener.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
             listener.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/lang/Object", "getClass", "()Ljava/lang/Class;"));
             listener.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/lang/Class", "getName", "()Ljava/lang/String;"));
+            listener.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V"));
+            listener.instructions.add(new LdcInsnNode("Static call"));
             listener.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V"));
             listener.instructions.add(new InsnNode(Opcodes.RETURN));
             listener.visibleAnnotations = new ArrayList<>();
