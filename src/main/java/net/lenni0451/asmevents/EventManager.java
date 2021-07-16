@@ -14,6 +14,7 @@ import net.lenni0451.asmevents.internal.RuntimeThrowErrorListener;
 import net.lenni0451.asmevents.utils.ASMUtils;
 import net.lenni0451.asmevents.utils.ClassDefiner;
 import net.lenni0451.asmevents.utils.ReflectUtils;
+import net.lenni0451.asmevents.utils.Tuple;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -179,17 +180,17 @@ public class EventManager {
         if (listenerMethods == null) return;
 
         final PipelineSafety pipelineSafety = eventType.getDeclaredAnnotation(PipelineSafety.class);
-        final List<Method> allMethods = new ArrayList<>();
-        final Map<Method, IWrappedCaller> methodToWrapper = new LinkedHashMap<>();
+        final List<Tuple<Method, IWrappedCaller>> allMethods = new ArrayList<>();
 
         { //Prepare list of all methods and map to map them back to the instance
             for (Map.Entry<Object, Map<Method, IWrappedCaller>> entry : listenerMethods.entrySet()) {
-                allMethods.addAll(entry.getValue().keySet());
-                methodToWrapper.putAll(entry.getValue());
+                for (Map.Entry<Method, IWrappedCaller> methods : entry.getValue().entrySet()) {
+                    allMethods.add(new Tuple<>(methods.getKey(), methods.getValue()));
+                }
             }
             allMethods.sort((o1, o2) -> { //Sort all methods by priority
-                EventTarget o1target = o1.getDeclaredAnnotation(EventTarget.class);
-                EventTarget o2target = o2.getDeclaredAnnotation(EventTarget.class);
+                EventTarget o1target = o1.getA().getDeclaredAnnotation(EventTarget.class);
+                EventTarget o2target = o2.getA().getDeclaredAnnotation(EventTarget.class);
                 return o2target.priority().compareTo(o1target.priority());
             });
         }
@@ -203,11 +204,8 @@ public class EventManager {
         if (pipelineSafety != null && pipelineSafety.value().equals(EnumPipelineSafety.ERROR_LISTENER)) { //Add the errorListener field if needed
             pipelineNode.visitField(Opcodes.ACC_PUBLIC, "errorListener", Type.getDescriptor(IErrorListener.class), null, null);
         }
-        {
-            int i = 0;
-            for (Map.Entry<Method, IWrappedCaller> ignored : methodToWrapper.entrySet()) {
-                pipelineNode.visitField(Opcodes.ACC_PUBLIC, "listener" + i++, Type.getDescriptor(IWrappedCaller.class), null, null);
-            }
+        for (int i = 0; i < allMethods.size(); i++) {
+            pipelineNode.visitField(Opcodes.ACC_PUBLIC, "listener" + i, Type.getDescriptor(IWrappedCaller.class), null, null);
         }
         { //Insert call method and all listener calls
             MethodVisitor visitor = pipelineNode.visitMethod(Opcodes.ACC_PUBLIC, ReflectUtils.getMethodByArgs(IEventPipeline.class, IEvent.class).getName(), "(" + Type.getDescriptor(IEvent.class) + ")V", null, new String[]{"java/lang/Throwable"});
@@ -222,8 +220,8 @@ public class EventManager {
                 visitor.visitVarInsn(Opcodes.ASTORE, 3);
             }
             int wrapperIndex = 0;
-            for (Method method : allMethods) {
-                final EventTarget eventTarget = method.getDeclaredAnnotation(EventTarget.class);
+            for (Tuple<Method, IWrappedCaller> method : allMethods) {
+                final EventTarget eventTarget = method.getA().getDeclaredAnnotation(EventTarget.class);
                 Label jumpAfter = null;
                 Label endBlock = null;
                 Label catchBlock = null;
@@ -265,8 +263,8 @@ public class EventManager {
                     visitor.visitFieldInsn(Opcodes.GETFIELD, pipelineNode.name, "listener" + wrapperIndex++, Type.getDescriptor(IWrappedCaller.class));
                     visitor.visitVarInsn(Opcodes.ALOAD, 1);
                     //And finally actually call the listener method
-                    method = ReflectUtils.getMethodByArgs(IWrappedCaller.class, IEvent.class);
-                    visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, IWrappedCaller.class.getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), true);
+                    Method m = ReflectUtils.getMethodByArgs(IWrappedCaller.class, IEvent.class);
+                    visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, IWrappedCaller.class.getName().replace(".", "/"), m.getName(), Type.getMethodDescriptor(m), true);
                 }
                 if (pipelineSafety != null) {
                     if (jumpAfter == null) jumpAfter = new Label();
@@ -308,11 +306,10 @@ public class EventManager {
                     field.set(pipeline, ERROR_LISTENER);
                     fields = Arrays.copyOfRange(fields, 1, fields.length); //Cut the error listener field
                 }
-                int index = 0;
-                for (IWrappedCaller wrapper : methodToWrapper.values()) {
-                    Field field = fields[index++];
+                for (int i = 0; i < allMethods.size(); i++) {
+                    Field field = fields[i];
                     field.setAccessible(true);
-                    field.set(pipeline, wrapper);
+                    field.set(pipeline, allMethods.get(i).getB());
                 }
             }
             EVENT_PIPELINES.put(eventType, pipeline);
