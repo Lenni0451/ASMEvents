@@ -1,6 +1,9 @@
 # ASMEvents
 A fast and feature rich Event library for Java using ASM to dynamically generate executor classes.  
-The library has full obfuscation support and allows for multithreaded event access even for timing critical events.
+The library has full obfuscation support and allows for asynchronous event access even for timing critical events.  
+This lib combines maximum feature support of reflection based systems and fast call speeds of simple interface based systems.  
+
+But as all things nothing is perfect and so is this lib. Registering a listener can take up to 100ms but listener calling is extremely quick.
 
 ## Usage
 ### EventTarget annotation
@@ -17,7 +20,7 @@ The `@EventTarget` annotation has some useful fields you can use.
 | priority      | Give listener more priority in the pipeline and ensure they are called ad the correct spot |
 | type          | Choose only which type of event should get passed to the method (`PRE`, `POST` or both)    |
 | skipCancelled | Skip events which are already cancelled to speed up the call                               |
-| noParamEvents | Some events to listen to without getting their instance                                    |
+| noParamEvents | Some events to listen to without requiring their instance                                    |
 
 ### EventManager
 The EventManager is the main class you will be working with.  
@@ -58,14 +61,6 @@ To do that just call the `setErrorListener` method.
 ```Java
 //The error listener needs to implement the IErrorListener interface
 EventManager.setErrorListener(new ErrorListenerImpl());
-```
-
-The generated pipeline classes for the events are loaded using a custom ClassLoader by default.  
-You may want to change how they get loaded so there is an interface to provide class loading.  
-To the set class load provider just call the `setClassLoadProvider` method.
-```Java
-//The class load provider needs to implement the IClassLoadProvider interface
-EventManager.setClassLoadProvider(new ClassLoadProviderImpl());
 ```
 
 ### Event types
