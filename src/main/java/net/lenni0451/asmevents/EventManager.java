@@ -9,9 +9,10 @@ import net.lenni0451.asmevents.event.types.ICancellableEvent;
 import net.lenni0451.asmevents.event.types.IStoppableEvent;
 import net.lenni0451.asmevents.event.types.ITypedEvent;
 import net.lenni0451.asmevents.internal.IEventPipeline;
-import net.lenni0451.asmevents.internal.PipelineLoaderClassLoadProvider;
+import net.lenni0451.asmevents.internal.IWrappedCaller;
 import net.lenni0451.asmevents.internal.RuntimeThrowErrorListener;
 import net.lenni0451.asmevents.utils.ASMUtils;
+import net.lenni0451.asmevents.utils.ClassDefiner;
 import net.lenni0451.asmevents.utils.ReflectUtils;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
@@ -31,7 +32,6 @@ public class EventManager {
     private static final Map<Class<? extends IEvent>, Map<Object, List<Method>>> EVENT_LISTENER = new ConcurrentHashMap<>();
     private static final Map<Class<? extends IEvent>, IEventPipeline> EVENT_PIPELINES = new ConcurrentHashMap<>();
     private static IErrorListener ERROR_LISTENER = new RuntimeThrowErrorListener();
-    private static IClassLoadProvider CLASS_LOAD_PROVIDER = new PipelineLoaderClassLoadProvider(EventManager.class);
 
     /**
      * Register all events in the class<br>
@@ -314,7 +314,7 @@ public class EventManager {
 
         try {
             //Load the pipeline class
-            Class<? extends IEventPipeline> pipelineClass = CLASS_LOAD_PROVIDER.loadClass(pipelineNode.name.replace("/", "."), ASMUtils.toBytes(pipelineNode));
+            Class<? extends IEventPipeline> pipelineClass = ClassDefiner.define(EventManager.class, pipelineNode.name.replace("/", "."), ASMUtils.toBytes(pipelineNode));
 
             //Create an instance of the loaded pipeline class
             IEventPipeline pipeline = (IEventPipeline) pipelineClass.getDeclaredConstructors()[0].newInstance();
@@ -338,6 +338,53 @@ public class EventManager {
         }
     }
 
+    /**
+     * Generate a call wrapper using the class loader of the listener
+     *
+     * @param listener The listener instance or class if static
+     */
+    public static IWrappedCaller wrap(final Object listener, final Method method, final Class<? extends IEvent> eventType) {
+        boolean isStatic = listener instanceof Class;
+        ClassNode node = new ClassNode();
+        node.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, "net/lenni0451/asmevents/Wrapper" + System.nanoTime(), null, "java/lang/Object", new String[]{IWrappedCaller.class.getName().replace(".", "/")});
+        if (!isStatic) {
+            node.visitField(Opcodes.ACC_PUBLIC, "listener", Type.getDescriptor(listener.getClass()), null, null);
+        }
+        { //Default constructor
+            MethodVisitor mv = node.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+            mv.visitInsn(Opcodes.RETURN);
+        }
+        {
+            MethodVisitor mv = node.visitMethod(Opcodes.ACC_PUBLIC, ReflectUtils.getMethodByArgs(IWrappedCaller.class, IEvent.class).getName(), "(" + Type.getDescriptor(IEvent.class) + ")V", null, null);
+            if (!isStatic) {
+                mv.visitVarInsn(Opcodes.ALOAD, 0);
+                mv.visitFieldInsn(Opcodes.GETFIELD, node.name, "listener", Type.getDescriptor(listener.getClass()));
+            }
+            for (Class<?> param : method.getParameterTypes()) { //Load all method paramenter or load null if it is not the current event
+                if (param.equals(eventType)) {
+                    mv.visitVarInsn(Opcodes.ALOAD, 1);
+                    mv.visitTypeInsn(Opcodes.CHECKCAST, eventType.getName().replace(".", "/"));
+                } else ASMUtils.generateNullValue(mv, param);
+            }
+            if (isStatic) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, listener.getClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);
+            } else {
+                mv.visitMethodInsn(method.getDeclaringClass().isInterface() ? Opcodes.INVOKEINTERFACE : Opcodes.INVOKEVIRTUAL, listener.getClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), method.getDeclaringClass().isInterface());
+            }
+            mv.visitInsn(Opcodes.RETURN);
+        }
+        try {
+            Object ob = ClassDefiner.define(listener.getClass(), node.name.replace("/", "."), ASMUtils.toBytes(node)).newInstance();
+            if (!isStatic) ob.getClass().getDeclaredFields()[0].set(ob, listener);
+            return (IWrappedCaller) ob;
+        } catch (Throwable t) {
+            ERROR_LISTENER.onException(t);
+        }
+        return null;
+    }
+
 
     /**
      * Set the handler of unhandled exceptions<br>
@@ -352,18 +399,6 @@ public class EventManager {
         Objects.requireNonNull(errorListener);
 
         ERROR_LISTENER = errorListener;
-    }
-
-    /**
-     * The the provider for loading the internal pipeline classes<br>
-     * By default all pipeline classes are loaded using a custom class loader
-     *
-     * @param classLoadProvider The provider
-     */
-    public static void setClassLoadProvider(final IClassLoadProvider classLoadProvider) {
-        Objects.requireNonNull(classLoadProvider);
-
-        CLASS_LOAD_PROVIDER = classLoadProvider;
     }
 
 }
