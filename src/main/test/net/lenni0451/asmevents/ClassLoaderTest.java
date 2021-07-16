@@ -2,7 +2,6 @@ package net.lenni0451.asmevents;
 
 import net.lenni0451.asmevents.event.PipelineSafety;
 import net.lenni0451.asmevents.event.wrapper.StoppableEvent;
-import net.lenni0451.asmevents.internal.IWrappedCaller;
 import net.lenni0451.asmevents.utils.ASMUtils;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.*;
@@ -15,10 +14,6 @@ public class ClassLoaderTest {
     public static void main(String[] args) throws Throwable {
         Class<?> c = cool();
         Object ob = c.newInstance();
-        IWrappedCaller obb = EventManager.wrap(ob, ob.getClass().getDeclaredMethod("listen", CoolEvent.class), CoolEvent.class);
-        IWrappedCaller obb2 = EventManager.wrap(ob.getClass(), ob.getClass().getDeclaredMethod("listenStatic", CoolEvent.class), CoolEvent.class);
-        obb.call(new CoolEvent());
-        obb2.call(new CoolEvent());
         EventManager.register(ob);
         EventManager.register(ob.getClass());
         EventManager.call(new CoolEvent());

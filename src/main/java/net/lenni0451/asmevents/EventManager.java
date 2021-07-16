@@ -319,11 +319,12 @@ public class EventManager {
     }
 
     /**
-     * Generate a call wrapper using the class loader of the listener
+     * Generate a call wrapper using the class loader of the listener<br>
+     * This fixes ClassLoader problems because the event listener is always executed from a class loaded with the same loader
      *
      * @param listener The listener instance or class if static
      */
-    public static IWrappedCaller wrap(final Object listener, final Method method, final Class<? extends IEvent> eventType) {
+    private static IWrappedCaller wrap(final Object listener, final Method method, final Class<? extends IEvent> eventType) {
         final boolean isStatic = listener instanceof Class;
         final Class<?> listenerClass = isStatic ? (Class<?>) listener : listener.getClass();
 
