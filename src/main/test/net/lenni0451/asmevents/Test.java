@@ -5,41 +5,50 @@ import net.lenni0451.asmevents.event.EventTarget;
 public class Test {
 
     public static void main(String[] args) {
-//        EventManager.setErrorListener(Throwable::printStackTrace);
-        EventManager.setErrorListener((e) -> System.out.println("ERROR!"));
+        EventManager.register(Test.class);
 
-        new Thread(() -> {
-            EventManager.register(TestEvent1.class, Test.class);
-            for (int i = 0; i < 100; i++) {
-                EventManager.call(new TestEvent1());
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }).start();
-        new Thread(() -> {
-            EventManager.register(TestEvent2.class, Test.class);
-            for (int i = 0; i < 200; i++) {
-                EventManager.call(new TestEvent2());
-                try {
-                    Thread.sleep(25);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }).start();
+        EventManager.call(new TestEvent1());
+        EventManager.call(new TestEvent2());
+
+        EventManager.unregister(Test.class);
+        System.out.println("No calls");
+
+        EventManager.call(new TestEvent1());
+        EventManager.call(new TestEvent2());
+
+        EventManager.register(Test.class);
+        EventManager.unregister(TestEvent2.class, Test.class);
+        System.out.println("Only one call");
+
+        EventManager.call(new TestEvent1());
+        EventManager.call(new TestEvent2());
+
+        EventManager.unregister(Test.class);
+        EventManager.register(TestEvent2.class, Test.class);
+        System.out.println("Only one call");
+
+        EventManager.call(new TestEvent1());
+        EventManager.call(new TestEvent2());
     }
 
     @EventTarget
-    public static void ab(final TestEvent1 event) {
-        System.out.println("Call 1");
+    public static void ab(final TestEvent1 event, String s) {
+        System.out.println("Call 1 " + event + " " + s);
     }
 
     @EventTarget
-    public static void abd(final TestEvent2 event) {
-        System.out.println("Call 2");
+    public static void abd(final TestEvent2 event, int i) {
+        System.out.println("Call 2 " + event + " " + i);
+    }
+
+    @EventTarget
+    public static void nothing() {
+        System.out.println("Should not call");
+    }
+
+    @EventTarget(noParamEvents = {TestEvent2.class})
+    public static void otherEventType(TestEvent1 event) {
+        System.out.println("Should call twice " + event);
     }
 
 }
