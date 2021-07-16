@@ -275,7 +275,7 @@ public class EventManager {
                         visitor.visitVarInsn(Opcodes.ALOAD, 0);
                         visitor.visitFieldInsn(Opcodes.GETFIELD, pipelineNode.name, "listener" + allListener.indexOf(listener), Type.getDescriptor(listener.getClass()));
                     }
-                    for (Class<?> param : method.getParameterTypes()) { //Load all method paramenter or load null if it is not the current event
+                    for (Class<?> param : method.getParameterTypes()) { //Load all method parameter or load null if it is not the current event
                         if (param.equals(eventType)) visitor.visitVarInsn(Opcodes.ALOAD, 2);
                         else ASMUtils.generateNullValue(visitor, param);
                     }
@@ -344,11 +344,13 @@ public class EventManager {
      * @param listener The listener instance or class if static
      */
     public static IWrappedCaller wrap(final Object listener, final Method method, final Class<? extends IEvent> eventType) {
-        boolean isStatic = listener instanceof Class;
+        final boolean isStatic = listener instanceof Class;
+        final Class<?> listenerClass = isStatic ? (Class<?>) listener : listener.getClass();
+
         ClassNode node = new ClassNode();
         node.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, "net/lenni0451/asmevents/Wrapper" + System.nanoTime(), null, "java/lang/Object", new String[]{IWrappedCaller.class.getName().replace(".", "/")});
         if (!isStatic) {
-            node.visitField(Opcodes.ACC_PUBLIC, "listener", Type.getDescriptor(listener.getClass()), null, null);
+            node.visitField(Opcodes.ACC_PUBLIC, "listener", Type.getDescriptor(listenerClass), null, null);
         }
         { //Default constructor
             MethodVisitor mv = node.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
@@ -360,23 +362,27 @@ public class EventManager {
             MethodVisitor mv = node.visitMethod(Opcodes.ACC_PUBLIC, ReflectUtils.getMethodByArgs(IWrappedCaller.class, IEvent.class).getName(), "(" + Type.getDescriptor(IEvent.class) + ")V", null, null);
             if (!isStatic) {
                 mv.visitVarInsn(Opcodes.ALOAD, 0);
-                mv.visitFieldInsn(Opcodes.GETFIELD, node.name, "listener", Type.getDescriptor(listener.getClass()));
+                mv.visitFieldInsn(Opcodes.GETFIELD, node.name, "listener", Type.getDescriptor(listenerClass));
             }
-            for (Class<?> param : method.getParameterTypes()) { //Load all method paramenter or load null if it is not the current event
+            for (Class<?> param : method.getParameterTypes()) { //Load all method parameter or load null if it is not the current event
                 if (param.equals(eventType)) {
                     mv.visitVarInsn(Opcodes.ALOAD, 1);
                     mv.visitTypeInsn(Opcodes.CHECKCAST, eventType.getName().replace(".", "/"));
-                } else ASMUtils.generateNullValue(mv, param);
+                } else if (param.equals(IEvent.class)) {
+                    mv.visitVarInsn(Opcodes.ALOAD, 1);
+                } else {
+                    ASMUtils.generateNullValue(mv, param);
+                }
             }
             if (isStatic) {
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC, listener.getClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, listenerClass.getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), false);
             } else {
-                mv.visitMethodInsn(method.getDeclaringClass().isInterface() ? Opcodes.INVOKEINTERFACE : Opcodes.INVOKEVIRTUAL, listener.getClass().getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), method.getDeclaringClass().isInterface());
+                mv.visitMethodInsn(method.getDeclaringClass().isInterface() ? Opcodes.INVOKEINTERFACE : Opcodes.INVOKEVIRTUAL, listenerClass.getName().replace(".", "/"), method.getName(), Type.getMethodDescriptor(method), method.getDeclaringClass().isInterface());
             }
             mv.visitInsn(Opcodes.RETURN);
         }
         try {
-            Object ob = ClassDefiner.define(listener.getClass(), node.name.replace("/", "."), ASMUtils.toBytes(node)).newInstance();
+            Object ob = ClassDefiner.define(listenerClass, node.name.replace("/", "."), ASMUtils.toBytes(node)).newInstance();
             if (!isStatic) ob.getClass().getDeclaredFields()[0].set(ob, listener);
             return (IWrappedCaller) ob;
         } catch (Throwable t) {
