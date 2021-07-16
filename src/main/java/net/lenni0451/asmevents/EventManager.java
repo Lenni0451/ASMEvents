@@ -20,11 +20,9 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
 
-import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -297,7 +295,6 @@ public class EventManager {
         }
 
         try {
-            Files.write(new File("C:/Users/User/Desktop/cool.class").toPath(), ASMUtils.toBytes(pipelineNode));
             //Load the pipeline class
             Class<? extends IEventPipeline> pipelineClass = ClassDefiner.define(EventManager.class, pipelineNode.name.replace("/", "."), ASMUtils.toBytes(pipelineNode));
 
