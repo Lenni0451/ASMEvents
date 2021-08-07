@@ -21,7 +21,6 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.*;
@@ -180,6 +179,7 @@ public class EventManager {
         if (listenerMethods == null) return;
 
         final PipelineSafety pipelineSafety = eventType.getDeclaredAnnotation(PipelineSafety.class);
+        final boolean needsListener;
         final List<Tuple<Method, IWrappedCaller>> allMethods = new ArrayList<>();
 
         { //Prepare list of all methods and map to map them back to the instance
@@ -202,8 +202,9 @@ public class EventManager {
         ASMUtils.addDefaultConstructor(pipelineNode);
 
         if (pipelineSafety != null && pipelineSafety.value().equals(EnumPipelineSafety.ERROR_LISTENER)) { //Add the errorListener field if needed
+            needsListener = true;
             pipelineNode.visitField(Opcodes.ACC_PUBLIC, "errorListener", Type.getDescriptor(IErrorListener.class), null, null);
-        }
+        } else needsListener = false;
         for (int i = 0; i < allMethods.size(); i++) {
             pipelineNode.visitField(Opcodes.ACC_PUBLIC, "listener" + i, Type.getDescriptor(IWrappedCaller.class), null, null);
         }
@@ -291,6 +292,23 @@ public class EventManager {
             visitor.visitInsn(Opcodes.RETURN);
             visitor.visitEnd();
         }
+        { //Insert setFields method
+            MethodVisitor visitor = pipelineNode.visitMethod(Opcodes.ACC_PUBLIC, ReflectUtils.getMethodByArgs(IEventPipeline.class, IErrorListener.class, List.class).getName(), "(" + Type.getDescriptor(IErrorListener.class) + Type.getDescriptor(List.class) + ")V", null, null);
+            if (needsListener) {
+                visitor.visitVarInsn(Opcodes.ALOAD, 0);
+                visitor.visitVarInsn(Opcodes.ALOAD, 1);
+                visitor.visitFieldInsn(Opcodes.PUTFIELD, pipelineNode.name, "errorListener", Type.getDescriptor(IErrorListener.class));
+            }
+            for (int i = 0; i < allMethods.size(); i++) {
+                visitor.visitVarInsn(Opcodes.ALOAD, 0);
+                visitor.visitVarInsn(Opcodes.ALOAD, 2);
+                visitor.visitIntInsn(Opcodes.SIPUSH, i);
+                visitor.visitMethodInsn(Opcodes.INVOKEINTERFACE, List.class.getName().replace(".", "/"), "get", "(I)Ljava/lang/Object;", true);
+                visitor.visitFieldInsn(Opcodes.PUTFIELD, pipelineNode.name, "listener" + i, Type.getDescriptor(IWrappedCaller.class));
+            }
+            visitor.visitInsn(Opcodes.RETURN);
+            visitor.visitEnd();
+        }
 
         try {
             //Load the pipeline class
@@ -298,20 +316,10 @@ public class EventManager {
 
             //Create an instance of the loaded pipeline class
             IEventPipeline pipeline = (IEventPipeline) pipelineClass.getDeclaredConstructors()[0].newInstance();
-            { //Use reflection to set all listener instance fields and error listener if needed
-                Field[] fields = pipeline.getClass().getDeclaredFields();
-                if (fields.length > 0 && fields[0].getType().equals(IErrorListener.class)) {
-                    Field field = fields[0];
-                    field.setAccessible(true);
-                    field.set(pipeline, ERROR_LISTENER);
-                    fields = Arrays.copyOfRange(fields, 1, fields.length); //Cut the error listener field
-                }
-                for (int i = 0; i < allMethods.size(); i++) {
-                    Field field = fields[i];
-                    field.setAccessible(true);
-                    field.set(pipeline, allMethods.get(i).getB());
-                }
-            }
+            //Set all caller fields and if needed the error listener
+            List<IWrappedCaller> allCaller = new ArrayList<>();
+            for (Tuple<Method, IWrappedCaller> type : allMethods) allCaller.add(type.getB());
+            pipeline.setFields(ERROR_LISTENER, allCaller);
             EVENT_PIPELINES.put(eventType, pipeline);
         } catch (Throwable t) {
             ERROR_LISTENER.onException(t);
